@@ -6,14 +6,18 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.conf import settings
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 import os
 import json
+import tempfile
+import shutil
+import zipfile
 from pathlib import Path
 
 from core.models import GeneratedYAMLFile, MCPServerInstance
 from .serializers import MCPServerInstanceSerializer
 from .services import MCPServer, MCPToolRegistry
+from .claude_desktop_utils import create_mcp_server_package, generate_claude_desktop_config
 
 # Global registry for MCP servers
 mcp_registry = MCPToolRegistry()
@@ -265,4 +269,152 @@ class MCPRegistryViewSet(viewsets.ViewSet):
             return Response({
                 'status': 'error',
                 'message': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    @action(detail=True, methods=['get'])
+    def generate_claude_package(self, request, pk=None):
+        """
+        Generate a complete Claude Desktop package for an MCP server
+        """
+        try:
+            server_instance = self.get_object()
+            yaml_file = server_instance.yaml_file
+            
+            # Create temporary directory for package
+            temp_dir = tempfile.mkdtemp()
+            package_name = f"{server_instance.server_name}_claude_package"
+            package_dir = os.path.join(temp_dir, package_name)
+            
+            try:
+                # Create the MCP server package
+                created_files = create_mcp_server_package(
+                    yaml_file_path=yaml_file.yaml_file.path,
+                    server_name=server_instance.server_name,
+                    output_dir=package_dir,
+                    include_config=True
+                )
+                
+                # Create ZIP file
+                zip_path = os.path.join(temp_dir, f"{package_name}.zip")
+                with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                    package_path = Path(package_dir)
+                    for file_path in package_path.rglob('*'):
+                        if file_path.is_file():
+                            arcname = file_path.relative_to(package_path)
+                            zipf.write(file_path, arcname)
+                
+                # Read ZIP file for response
+                with open(zip_path, 'rb') as f:
+                    zip_data = f.read()
+                
+                response = HttpResponse(
+                    zip_data,
+                    content_type='application/zip'
+                )
+                response['Content-Disposition'] = f'attachment; filename="{package_name}.zip"'
+                
+                return response
+                
+            finally:
+                # Cleanup temporary directory
+                shutil.rmtree(temp_dir, ignore_errors=True)
+                
+        except Exception as e:
+            return Response({
+                'status': 'error',
+                'message': f'Failed to generate Claude Desktop package: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    @action(detail=True, methods=['get'])
+    def claude_config(self, request, pk=None):
+        """
+        Generate Claude Desktop configuration JSON for this server
+        """
+        try:
+            server_instance = self.get_object()
+            
+            # Generate configuration for a single server
+            mcp_servers = [{
+                'name': server_instance.server_name,
+                'yaml_file_path': server_instance.yaml_file.yaml_file.path,
+                'server_script': 'mcp_server_fastmcp.py'  # Default script name
+            }]
+            
+            config_json = generate_claude_desktop_config(mcp_servers)
+            
+            return Response({
+                'status': 'success',
+                'config': json.loads(config_json),
+                'instructions': {
+                    'steps': [
+                        '1. Copy the configuration below',
+                        '2. Locate your Claude Desktop config file:',
+                        '   - macOS: ~/Library/Application Support/Claude/claude_desktop_config.json',
+                        '   - Windows: %APPDATA%\\Claude\\claude_desktop_config.json',
+                        '3. Add this server to the "mcpServers" section',
+                        '4. Update the "args" path to the absolute path of your server script',
+                        '5. Restart Claude Desktop'
+                    ],
+                    'config_example': config_json
+                }
+            })
+            
+        except Exception as e:
+            return Response({
+                'status': 'error',
+                'message': f'Failed to generate Claude Desktop configuration: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['post'])
+    def bulk_claude_config(self, request):
+        """
+        Generate Claude Desktop configuration for multiple servers
+        """
+        try:
+            server_ids = request.data.get('server_ids', [])
+            
+            if not server_ids:
+                # Get all active servers
+                server_instances = MCPServerInstance.objects.filter(is_running=True)
+            else:
+                server_instances = MCPServerInstance.objects.filter(id__in=server_ids)
+            
+            mcp_servers = []
+            for server_instance in server_instances:
+                mcp_servers.append({
+                    'name': server_instance.server_name,
+                    'yaml_file_path': server_instance.yaml_file.yaml_file.path,
+                    'server_script': 'mcp_server_fastmcp.py'
+                })
+            
+            if not mcp_servers:
+                return Response({
+                    'status': 'error',
+                    'message': 'No servers found to configure'
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            config_json = generate_claude_desktop_config(mcp_servers)
+            
+            return Response({
+                'status': 'success',
+                'servers_count': len(mcp_servers),
+                'config': json.loads(config_json),
+                'instructions': {
+                    'steps': [
+                        '1. Copy the configuration below',
+                        '2. Locate your Claude Desktop config file:',
+                        '   - macOS: ~/Library/Application Support/Claude/claude_desktop_config.json',
+                        '   - Windows: %APPDATA%\\Claude\\claude_desktop_config.json',
+                        '3. Merge this configuration with your existing "mcpServers" section',
+                        '4. Update all "args" paths to absolute paths of your server scripts',
+                        '5. Restart Claude Desktop'
+                    ],
+                    'config_example': config_json
+                }
+            })
+            
+        except Exception as e:
+            return Response({
+                'status': 'error',
+                'message': f'Failed to generate bulk Claude Desktop configuration: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
