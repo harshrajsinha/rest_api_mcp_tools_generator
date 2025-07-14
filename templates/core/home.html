@@ -1,0 +1,214 @@
+{% extends 'core/base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="jumbotron bg-primary text-white p-5 rounded mb-4">
+            <h1 class="display-4">
+                <i class="fas fa-cogs"></i> REST API MCP Tools Generator
+            </h1>
+            <p class="lead">
+                Generate MCP Server tools from REST API Swagger specifications automatically.
+            </p>
+            <hr class="my-4">
+            <p>
+                This tool processes Swagger/OpenAPI interfaces and generates YAML files with tool definitions,
+                which can then be used to create MCP servers for REST API services.
+            </p>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Tools Generator Section -->
+    <div class="col-lg-6 mb-4">
+        <div class="card h-100" id="tools-generator">
+            <div class="card-header bg-info text-white">
+                <h3><i class="fas fa-tools"></i> Tools Generator</h3>
+            </div>
+            <div class="card-body">
+                <p class="card-text">
+                    Parse Swagger specifications and generate YAML tool definitions for REST APIs.
+                </p>
+                
+                <div class="mb-3">
+                    <h5>Features:</h5>
+                    <ul class="list-unstyled">
+                        <li><i class="fas fa-check text-success"></i> Test Swagger URL connectivity</li>
+                        <li><i class="fas fa-check text-success"></i> Parse API endpoints and parameters</li>
+                        <li><i class="fas fa-check text-success"></i> Generate YAML tool definitions</li>
+                        <li><i class="fas fa-check text-success"></i> Enhance API descriptions</li>
+                        <li><i class="fas fa-check text-success"></i> Support multiple authentication methods</li>
+                    </ul>
+                </div>
+
+                <!-- API Configuration Form -->
+                <div class="api-config-section">
+                    <h5>Create New API Configuration</h5>
+                    <form id="api-config-form">
+                        <div class="mb-3">
+                            <label for="apiName" class="form-label">API Name</label>
+                            <input type="text" class="form-control" id="apiName" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="swaggerUrl" class="form-label">Swagger URL</label>
+                            <input type="url" class="form-control" id="swaggerUrl" required>
+                            <button type="button" class="btn btn-sm btn-outline-primary mt-2" id="testSwaggerBtn">
+                                <i class="fas fa-link"></i> Test Connection
+                            </button>
+                        </div>
+                        <div class="mb-3">
+                            <label for="apiBaseUrl" class="form-label">API Base URL</label>
+                            <input type="url" class="form-control" id="apiBaseUrl" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="apiDescription" class="form-label">Description</label>
+                            <textarea class="form-control" id="apiDescription" rows="3"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label for="authType" class="form-label">Authentication Type</label>
+                            <select class="form-control" id="authType">
+                                <option value="none">No Authentication</option>
+                                <option value="api_key">API Key</option>
+                                <option value="bearer_token">Bearer Token</option>
+                                <option value="basic_auth">Basic Authentication</option>
+                                <option value="oauth2">OAuth2</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save"></i> Save Configuration
+                        </button>
+                    </form>
+                </div>
+
+                <!-- API Configurations List -->
+                <div class="mt-4">
+                    <h5>Existing Configurations</h5>
+                    <div id="api-configs-list">
+                        <!-- Will be populated by JavaScript -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MCP Server Section -->
+    <div class="col-lg-6 mb-4">
+        <div class="card h-100" id="mcp-server">
+            <div class="card-header bg-success text-white">
+                <h3><i class="fas fa-server"></i> MCP Server</h3>
+            </div>
+            <div class="card-body">
+                <p class="card-text">
+                    Create and manage MCP servers from generated YAML tool definitions.
+                </p>
+                
+                <div class="mb-3">
+                    <h5>Features:</h5>
+                    <ul class="list-unstyled">
+                        <li><i class="fas fa-check text-success"></i> Dynamic tool loading from YAML</li>
+                        <li><i class="fas fa-check text-success"></i> REST API tool execution</li>
+                        <li><i class="fas fa-check text-success"></i> Multiple server instances</li>
+                        <li><i class="fas fa-check text-success"></i> Real-time tool testing</li>
+                        <li><i class="fas fa-check text-success"></i> Server management interface</li>
+                    </ul>
+                </div>
+
+                <!-- YAML Files List -->
+                <div class="yaml-files-section">
+                    <h5>Available YAML Files</h5>
+                    <div id="yaml-files-list">
+                        <!-- Will be populated by JavaScript -->
+                    </div>
+                </div>
+
+                <!-- MCP Servers List -->
+                <div class="mt-4">
+                    <h5>Running MCP Servers</h5>
+                    <div id="mcp-servers-list">
+                        <!-- Will be populated by JavaScript -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Status Messages -->
+<div class="row">
+    <div class="col-12">
+        <div id="status-messages">
+            <!-- Status messages will appear here -->
+        </div>
+    </div>
+</div>
+
+<!-- Modals -->
+<!-- API Endpoint Enhancement Modal -->
+<div class="modal fade" id="enhanceEndpointModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Enhance API Endpoint</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="enhance-endpoint-form">
+                    <div class="mb-3">
+                        <label for="endpointPath" class="form-label">Endpoint</label>
+                        <input type="text" class="form-control" id="endpointPath" readonly>
+                    </div>
+                    <div class="mb-3">
+                        <label for="enhancedSummary" class="form-label">Enhanced Summary</label>
+                        <input type="text" class="form-control" id="enhancedSummary">
+                    </div>
+                    <div class="mb-3">
+                        <label for="enhancedDescription" class="form-label">Enhanced Description</label>
+                        <textarea class="form-control" id="enhancedDescription" rows="4"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveEnhancementBtn">Save Enhancement</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tool Testing Modal -->
+<div class="modal fade" id="testToolModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Test Tool</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="test-tool-form">
+                    <div class="mb-3">
+                        <label for="toolName" class="form-label">Tool Name</label>
+                        <input type="text" class="form-control" id="toolName" readonly>
+                    </div>
+                    <div id="tool-parameters">
+                        <!-- Tool parameters will be populated here -->
+                    </div>
+                </form>
+                <div class="mt-3">
+                    <h6>Result:</h6>
+                    <pre id="tool-result" class="bg-light p-3 rounded"></pre>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="executeToolBtn">Execute Tool</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/main.js' %}"></script>
+{% endblock %}
