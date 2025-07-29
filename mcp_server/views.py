@@ -4,7 +4,7 @@ REST API views for MCP Server management
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny
 from django.conf import settings
 from django.http import JsonResponse, HttpResponse
 import os
@@ -29,7 +29,7 @@ class MCPServerInstanceViewSet(viewsets.ModelViewSet):
     """
     queryset = MCPServerInstance.objects.all()
     serializer_class = MCPServerInstanceSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
     
     @action(detail=True, methods=['post'])
     def start_server(self, request, pk=None):
@@ -189,7 +189,7 @@ class MCPRegistryViewSet(viewsets.ViewSet):
     """
     ViewSet for managing the global MCP registry
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
     
     @action(detail=False, methods=['get'])
     def list_servers(self, request):
