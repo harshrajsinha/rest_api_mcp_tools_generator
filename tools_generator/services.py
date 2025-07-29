@@ -6,7 +6,7 @@ import yaml
 import json
 from typing import Dict, List, Any, Optional
 from urllib.parse import urljoin
-from swagger_spec_validator import validate_spec
+from swagger_spec_validator.validator20 import validate_spec
 from jsonschema import ValidationError
 import logging
 

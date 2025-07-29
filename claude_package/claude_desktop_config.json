@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "petstore_api_claude": {
+      "command": "C:/Users/HR/OneDrive/GitHub Projects/MCP Servers/rest_api_mcp_tools_generator/venv/Scripts/python.exe",
+      "args": [
+        "C:\\Users\\HR\\OneDrive\\GitHub Projects\\MCP Servers\\rest_api_mcp_tools_generator\\claude_package\\petstore_api_claude_server.py",
+        "C:\\Users\\HR\\OneDrive\\GitHub Projects\\MCP Servers\\rest_api_mcp_tools_generator\\claude_package\\petstore_api_claude.yaml",
+        "petstore_api_claude"
+      ]
+    }
+  }
+}

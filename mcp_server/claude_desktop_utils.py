@@ -209,7 +209,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 # YAML file path (relative to this script)
-YAML_FILE_PATH = "{yaml_file_path}"
+YAML_FILE_PATH = r"{yaml_file_path}"
 SERVER_NAME = "{server_name}"
 
 

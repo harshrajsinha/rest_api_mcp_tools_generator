@@ -4,9 +4,10 @@ REST API views for Tools Generator
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny
 from django.conf import settings
 from django.http import JsonResponse, FileResponse
+from django.contrib.auth.models import User
 import os
 import json
 from pathlib import Path
@@ -34,10 +35,12 @@ class APIConfigurationViewSet(viewsets.ModelViewSet):
     """
     queryset = APIConfiguration.objects.all()
     serializer_class = APIConfigurationSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
     
     def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
+        # Get or create a default user for development
+        user, created = User.objects.get_or_create(username='admin', defaults={'email': 'admin@example.com'})
+        serializer.save(created_by=user)
     
     @action(detail=True, methods=['post'])
     def test_connection(self, request, pk=None):
@@ -97,7 +100,7 @@ class GeneratedYAMLFileViewSet(viewsets.ModelViewSet):
     """
     queryset = GeneratedYAMLFile.objects.all()
     serializer_class = GeneratedYAMLFileSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
     
     @action(detail=True, methods=['get'])
     def download(self, request, pk=None):
@@ -176,7 +179,7 @@ class APIEndpointViewSet(viewsets.ModelViewSet):
     """
     queryset = APIEndpoint.objects.all()
     serializer_class = APIEndpointSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
     
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -210,7 +213,7 @@ class ParameterEnhancementViewSet(viewsets.ModelViewSet):
     """
     queryset = ParameterEnhancement.objects.all()
     serializer_class = ParameterEnhancementSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
     
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -224,7 +227,7 @@ class SwaggerTestView(viewsets.ViewSet):
     """
     ViewSet for testing Swagger URLs without saving configuration
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
     
     @action(detail=False, methods=['post'])
     def test_swagger_url(self, request):

@@ -6,6 +6,7 @@ from django.conf import settings
 from pathlib import Path
 import tempfile
 import os
+import yaml
 
 from core.models import APIConfiguration, GeneratedYAMLFile, MCPServerInstance
 from tools_generator.services import SwaggerParser, YAMLGenerator
@@ -61,9 +62,10 @@ class Command(BaseCommand):
                 name=f"{server_name}_test",
                 defaults={
                     'swagger_url': swagger_url,
-                    'base_url': 'https://petstore.swagger.io/v2',
+                    'api_base_url': 'https://petstore.swagger.io/v2',
                     'auth_type': 'none',
                     'description': f'Test API configuration for {server_name}',
+                    'created_by_id': 1  # Assuming admin user exists
                 }
             )
             
@@ -79,17 +81,26 @@ class Command(BaseCommand):
             # Step 2: Parse Swagger and generate YAML
             self.stdout.write('Step 2: Parsing Swagger specification...')
             
-            parser = SwaggerParser()
-            swagger_data = parser.fetch_swagger_spec(swagger_url)
-            endpoints = parser.extract_endpoints(swagger_data)
+            parser = SwaggerParser(swagger_url, api_config.api_base_url)
+            swagger_data = parser.fetch_swagger_spec()
+            endpoints = parser.extract_endpoints()
             
             self.stdout.write(
                 self.style.SUCCESS(f'Found {len(endpoints)} endpoints')
             )
             
             # Generate YAML
-            generator = YAMLGenerator()
-            yaml_content = generator.generate_yaml(api_config, endpoints)
+            api_config_dict = {
+                'name': api_config.name,
+                'description': api_config.description,
+                'api_base_url': api_config.api_base_url,
+                'swagger_url': api_config.swagger_url,
+                'auth_type': api_config.auth_type,
+                'auth_config': api_config.auth_config,
+            }
+            generator = YAMLGenerator(api_config_dict, endpoints)
+            yaml_structure = generator.generate_yaml_structure()
+            yaml_content = yaml.dump(yaml_structure, default_flow_style=False, allow_unicode=True)
             
             # Save YAML file
             yaml_file, created = GeneratedYAMLFile.objects.get_or_create(
@@ -123,7 +134,7 @@ class Command(BaseCommand):
                 defaults={
                     'yaml_file': yaml_file,
                     'is_running': False,
-                    'configuration': {
+                    'server_config': {
                         'transport': 'stdio',
                         'claude_desktop_compatible': True
                     }
@@ -147,7 +158,7 @@ class Command(BaseCommand):
                 self.stdout.write(f'Using temporary directory: {output_dir}')
             
             # Create temporary YAML file for package creation
-            temp_yaml_path = os.path.join(output_dir, f'{server_name}.yaml')
+            temp_yaml_path = os.path.join(output_dir, f'{server_name}_temp.yaml')
             with open(temp_yaml_path, 'w', encoding='utf-8') as f:
                 f.write(yaml_content)
             

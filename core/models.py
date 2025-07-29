@@ -42,9 +42,10 @@ class APIConfiguration(models.Model):
 class GeneratedYAMLFile(models.Model):
     """Model to store generated YAML files information"""
     
-    api_config = models.ForeignKey(APIConfiguration, on_delete=models.CASCADE, related_name='yaml_files')
-    file_name = models.CharField(max_length=255)
-    file_path = models.CharField(max_length=500)
+    api_configuration = models.ForeignKey(APIConfiguration, on_delete=models.CASCADE, related_name='yaml_files')
+    file_name = models.CharField(max_length=255, blank=True)
+    file_path = models.CharField(max_length=500, blank=True)
+    yaml_content = models.TextField(blank=True, default="", help_text="Generated YAML content")
     tools_count = models.IntegerField(default=0)
     generation_status = models.CharField(
         max_length=20,
@@ -65,7 +66,7 @@ class GeneratedYAMLFile(models.Model):
         verbose_name_plural = 'Generated YAML Files'
     
     def __str__(self):
-        return f"{self.api_config.name} - {self.file_name}"
+        return f"{self.api_configuration.name} - {self.file_name or 'Untitled'}"
 
 
 class APIEndpoint(models.Model):

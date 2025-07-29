@@ -18,9 +18,9 @@ class APIConfigurationAdmin(admin.ModelAdmin):
 
 @admin.register(GeneratedYAMLFile)
 class GeneratedYAMLFileAdmin(admin.ModelAdmin):
-    list_display = ['file_name', 'api_config', 'tools_count', 'generation_status', 'created_at']
+    list_display = ['file_name', 'api_configuration', 'tools_count', 'generation_status', 'created_at']
     list_filter = ['generation_status', 'created_at']
-    search_fields = ['file_name', 'api_config__name']
+    search_fields = ['file_name', 'api_configuration__name']
     readonly_fields = ['created_at']
 
 
