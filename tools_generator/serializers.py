@@ -31,12 +31,12 @@ class GeneratedYAMLFileSerializer(serializers.ModelSerializer):
     """
     Serializer for Generated YAML File
     """
-    api_config_name = serializers.CharField(source='api_config.name', read_only=True)
+    api_config_name = serializers.CharField(source='api_configuration.name', read_only=True)
     
     class Meta:
         model = GeneratedYAMLFile
         fields = [
-            'id', 'api_config', 'api_config_name', 'file_name', 'file_path',
+            'id', 'api_configuration', 'api_config_name', 'file_name', 'file_path',
             'tools_count', 'generation_status', 'error_message', 'created_at'
         ]
         read_only_fields = ['created_at']

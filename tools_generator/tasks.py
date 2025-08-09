@@ -22,7 +22,7 @@ def generate_yaml_from_swagger(api_config_id):
         
         # Create or get the YAML file record
         yaml_file, created = GeneratedYAMLFile.objects.get_or_create(
-            api_config=api_config,
+            api_configuration=api_config,
             defaults={
                 'file_name': f"{api_config.name.lower().replace(' ', '_')}_tools.yaml",
                 'generation_status': 'processing'
@@ -99,7 +99,7 @@ def generate_yaml_from_swagger(api_config_id):
         
         # Update the YAML file record with error status
         try:
-            yaml_file = GeneratedYAMLFile.objects.get(api_config_id=api_config_id)
+            yaml_file = GeneratedYAMLFile.objects.get(api_configuration_id=api_config_id)
             yaml_file.generation_status = 'failed'
             yaml_file.error_message = str(e)
             yaml_file.save()

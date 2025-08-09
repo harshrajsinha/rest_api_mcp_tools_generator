@@ -10,6 +10,7 @@ from django.http import JsonResponse, FileResponse
 from django.contrib.auth.models import User
 import os
 import json
+import logging
 from pathlib import Path
 
 from core.models import (
@@ -27,6 +28,8 @@ from .serializers import (
 )
 from .services import SwaggerParser, YAMLGenerator, ToolClassGenerator
 from .tasks import generate_yaml_from_swagger
+
+logger = logging.getLogger(__name__)
 
 
 class APIConfigurationViewSet(viewsets.ModelViewSet):
@@ -78,16 +81,40 @@ class APIConfigurationViewSet(viewsets.ModelViewSet):
         api_config = self.get_object()
         
         try:
-            # Start the background task
-            task = generate_yaml_from_swagger.delay(api_config.id)
-            
-            return Response({
-                'status': 'success',
-                'message': 'YAML generation started',
-                'task_id': task.id
-            })
+            # Try to use Celery first
+            try:
+                task = generate_yaml_from_swagger.delay(api_config.id)
+                
+                return Response({
+                    'status': 'success',
+                    'message': 'YAML generation started (background task)',
+                    'task_id': task.id
+                })
+            except Exception as celery_error:
+                # If Celery fails, run synchronously
+                logger.warning(f"Celery not available, running synchronously: {celery_error}")
+                
+                # Import here to avoid circular imports
+                from .tasks import generate_yaml_from_swagger
+                
+                # Run the task function directly (synchronously)
+                result = generate_yaml_from_swagger(api_config.id)
+                
+                if result.get('status') == 'success':
+                    return Response({
+                        'status': 'success',
+                        'message': 'YAML generation completed successfully',
+                        'yaml_file_id': result.get('yaml_file_id'),
+                        'tools_count': result.get('tools_count')
+                    })
+                else:
+                    return Response({
+                        'status': 'error',
+                        'message': result.get('message', 'Unknown error occurred')
+                    }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
         except Exception as e:
+            logger.error(f"Error generating YAML: {e}")
             return Response({
                 'status': 'error',
                 'message': str(e)

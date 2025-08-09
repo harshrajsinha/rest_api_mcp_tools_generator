@@ -8,32 +8,44 @@ class APIManager {
 
     init() {
         this.setupEventListeners();
-        this.loadInitialData();
+        // Wait for DOM to be fully ready before loading data
+        $(document).ready(() => {
+            this.loadInitialData();
+        });
     }
 
     setupEventListeners() {
-        // API Configuration Form
-        $('#api-config-form').on('submit', this.handleAPIConfigSubmit.bind(this));
-        $('#testSwaggerBtn').on('click', this.handleTestSwagger.bind(this));
-        
-        // Tool enhancement
-        $(document).on('click', '.enhance-endpoint-btn', this.handleEnhanceEndpoint.bind(this));
-        $('#saveEnhancementBtn').on('click', this.handleSaveEnhancement.bind(this));
-        
-        // YAML generation
+        // Wait for DOM to be ready
+        $(document).ready(() => {
+            // API Configuration Form
+            $('#api-config-form').off('submit').on('submit', this.handleAPIConfigSubmit.bind(this));
+            
+            // Test Connection Button with multiple binding strategies
+            $('#testSwaggerBtn').off('click').on('click', this.handleTestSwagger.bind(this));
+            $(document).off('click', '#testSwaggerBtn').on('click', '#testSwaggerBtn', this.handleTestSwagger.bind(this));
+            
+            console.log('Test button found:', $('#testSwaggerBtn').length);
+            console.log('Event listeners set up successfully');
+        });
+            
+        // YAML generation - use event delegation for dynamically created buttons
         $(document).on('click', '.generate-yaml-btn', this.handleGenerateYAML.bind(this));
         
         // MCP Server management
         $(document).on('click', '.start-server-btn', this.handleStartServer.bind(this));
         $(document).on('click', '.stop-server-btn', this.handleStopServer.bind(this));
-        $(document).on('click', '.test-tool-btn', this.handleTestTool.bind(this));
-        $('#executeToolBtn').on('click', this.handleExecuteTool.bind(this));
     }
 
     async loadInitialData() {
-        await this.loadAPIConfigs();
-        await this.loadYAMLFiles();
-        await this.loadMCPServers();
+        console.log('Loading initial data...');
+        try {
+            await this.loadAPIConfigs();
+            await this.loadYAMLFiles();
+            await this.loadMCPServers();
+            console.log('Initial data loading completed');
+        } catch (error) {
+            console.error('Error loading initial data:', error);
+        }
     }
 
     // API Configuration Methods
@@ -60,10 +72,14 @@ class APIManager {
     }
 
     async handleTestSwagger(e) {
+        console.log('handleTestSwagger called');
         e.preventDefault();
         
         const swaggerUrl = $('#swaggerUrl').val();
         const apiBaseUrl = $('#apiBaseUrl').val();
+        
+        console.log('Swagger URL:', swaggerUrl);
+        console.log('API Base URL:', apiBaseUrl);
         
         if (!swaggerUrl) {
             this.showMessage('Please enter a Swagger URL', 'warning');
@@ -81,18 +97,26 @@ class APIManager {
                 api_base_url: apiBaseUrl
             });
 
+            console.log('API Response:', response);
+
             if (response.status === 'success') {
-                this.showMessage(`Successfully connected! Found ${response.swagger_info.endpoints_count} endpoints.`, 'success');
+                const message = `Successfully connected! Found ${response.swagger_info.endpoints_count} endpoints.`;
+                console.log('Success message:', message);
+                this.showMessage(message, 'success');
                 
                 // Auto-fill API name if empty
                 if (!$('#apiName').val() && response.swagger_info.title) {
                     $('#apiName').val(response.swagger_info.title);
                 }
             } else {
-                this.showMessage('Connection failed: ' + response.message, 'error');
+                const errorMessage = 'Connection failed: ' + response.message;
+                console.log('Error message:', errorMessage);
+                this.showMessage(errorMessage, 'error');
             }
         } catch (error) {
-            this.showMessage('Error testing connection: ' + error.message, 'error');
+            const catchMessage = 'Error testing connection: ' + error.message;
+            console.log('Catch message:', catchMessage);
+            this.showMessage(catchMessage, 'error');
         } finally {
             testBtn.html(originalText);
             testBtn.prop('disabled', false);
@@ -100,8 +124,10 @@ class APIManager {
     }
 
     async loadAPIConfigs() {
+        console.log('Loading API configs...');
         try {
             const configs = await this.apiCall('GET', '/tools-generator/api-configs/');
+            console.log('API configs loaded:', configs);
             this.renderAPIConfigs(configs.results || configs);
         } catch (error) {
             console.error('Error loading API configs:', error);
@@ -109,7 +135,9 @@ class APIManager {
     }
 
     renderAPIConfigs(configs) {
+        console.log('Rendering API configs:', configs);
         const container = $('#api-configs-list');
+        console.log('Container found:', container.length);
         
         if (!configs || configs.length === 0) {
             container.html('<p class="text-muted">No API configurations found.</p>');
@@ -145,7 +173,18 @@ class APIManager {
 
     // YAML Generation Methods
     async handleGenerateYAML(e) {
+        console.log('handleGenerateYAML called');
+        e.preventDefault();
+        
         const configId = $(e.target).closest('.generate-yaml-btn').data('id');
+        console.log('Config ID:', configId);
+        
+        if (!configId) {
+            console.error('No config ID found');
+            this.showMessage('Error: No configuration ID found', 'error');
+            return;
+        }
+        
         const btn = $(e.target).closest('.generate-yaml-btn');
         const originalText = btn.html();
         
@@ -155,6 +194,8 @@ class APIManager {
         try {
             const response = await this.apiCall('POST', `/tools-generator/api-configs/${configId}/generate_yaml/`);
             
+            console.log('Generate YAML response:', response);
+            
             if (response.status === 'success') {
                 this.showMessage('YAML generation started successfully!', 'success');
                 // Poll for completion
@@ -163,6 +204,7 @@ class APIManager {
                 this.showMessage('Error generating YAML: ' + response.message, 'error');
             }
         } catch (error) {
+            console.error('Generate YAML error:', error);
             this.showMessage('Error generating YAML: ' + error.message, 'error');
         } finally {
             btn.html(originalText);
@@ -215,7 +257,10 @@ class APIManager {
 
         // Add event listeners for new buttons
         $('.create-server-btn').on('click', this.handleCreateServer.bind(this));
-        $('.download-yaml-btn').on('click', this.handleDownloadYAML.bind(this));
+        // Note: Download functionality to be implemented later
+        $('.download-yaml-btn').on('click', function() {
+            alert('Download functionality coming soon!');
+        });
     }
 
     getStatusColor(status) {
@@ -432,27 +477,51 @@ class APIManager {
     }
 
     showMessage(message, type) {
+        console.log('showMessage called:', message, type);
+        
         const alertClass = type === 'success' ? 'alert-success' : 
                           type === 'error' ? 'alert-danger' : 
                           type === 'warning' ? 'alert-warning' : 'alert-info';
 
+        console.log('Alert class:', alertClass);
+        
         const alert = $(`
-            <div class="alert ${alertClass} alert-dismissible fade show" role="alert">
-                ${message}
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            <div class="alert ${alertClass} alert-dismissible fade show" role="alert" style="margin-bottom: 1rem;">
+                <strong>${type === 'success' ? '✅ Success:' : type === 'error' ? '❌ Error:' : type === 'warning' ? '⚠️  Warning:' : 'ℹ️  Info:'}</strong> ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
             </div>
         `);
 
-        $('#status-messages').append(alert);
+        console.log('Status messages container found:', $('#status-messages').length);
+        
+        // Clear previous messages of the same type to avoid clutter
+        $(`#status-messages .alert-${alertClass.split('-')[1]}`).remove();
+        
+        $('#status-messages').prepend(alert);
+        console.log('Alert appended');
 
-        // Auto-remove after 5 seconds
+        // Scroll to top to ensure message is visible
+        $('html, body').animate({ scrollTop: 0 }, 300);
+
+        // Auto-remove after 8 seconds (longer for better UX)
         setTimeout(() => {
-            alert.alert('close');
-        }, 5000);
+            alert.fadeOut(300, function() {
+                $(this).remove();
+            });
+        }, 8000);
     }
 }
 
 // Initialize the application when the page loads
 $(document).ready(function() {
     window.apiManager = new APIManager();
+    
+    // Backup function for direct onclick
+    window.testSwaggerClick = function() {
+        console.log('Direct onclick called');
+        alert('Direct onclick works!');
+        if (window.apiManager) {
+            window.apiManager.handleTestSwagger({preventDefault: function(){}});
+        }
+    };
 });
