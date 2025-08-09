@@ -157,9 +157,10 @@ class YAMLGenerator:
     Generates YAML files for REST API tools based on parsed Swagger data
     """
     
-    def __init__(self, api_config: Dict[str, Any], endpoints: List[Dict[str, Any]]):
+    def __init__(self, api_config: Dict[str, Any], endpoints: List[Dict[str, Any]], yaml_file=None):
         self.api_config = api_config
         self.endpoints = endpoints
+        self.yaml_file = yaml_file  # Optional: for enhanced descriptions
     
     def generate_yaml_structure(self) -> Dict[str, Any]:
         """
@@ -182,6 +183,137 @@ class YAMLGenerator:
             yaml_structure['tools'].append(tool_info)
         
         return yaml_structure
+    
+    def generate_enhanced_yaml_structure(self) -> Dict[str, Any]:
+        """
+        Generate YAML structure using enhanced descriptions from the database
+        """
+        if not self.yaml_file:
+            return self.generate_yaml_structure()
+        
+        # Import here to avoid circular import
+        from core.models import APIEndpoint, ParameterEnhancement
+        
+        yaml_structure = {
+            'api_info': {
+                'name': self.api_config.get('name', 'Generated API Tools'),
+                'description': self.api_config.get('description', ''),
+                'base_url': self.api_config.get('api_base_url', ''),
+                'swagger_url': self.api_config.get('swagger_url', ''),
+                'auth_type': self.api_config.get('auth_type', 'none'),
+                'auth_config': self.api_config.get('auth_config', {}),
+            },
+            'tools': []
+        }
+        
+        # Get enhanced endpoints from database
+        db_endpoints = APIEndpoint.objects.filter(yaml_file=self.yaml_file).prefetch_related('parameter_enhancements')
+        
+        for db_endpoint in db_endpoints:
+            # Find corresponding endpoint data
+            endpoint_data = None
+            for endpoint in self.endpoints:
+                if (endpoint['path'] == db_endpoint.path and 
+                    endpoint['method'].upper() == db_endpoint.method.upper()):
+                    endpoint_data = endpoint
+                    break
+            
+            if not endpoint_data:
+                continue
+            
+            tool_info = self._generate_enhanced_tool_info(endpoint_data, db_endpoint)
+            yaml_structure['tools'].append(tool_info)
+        
+        return yaml_structure
+    
+    def _generate_enhanced_tool_info(self, endpoint_data: Dict[str, Any], db_endpoint) -> Dict[str, Any]:
+        """
+        Generate tool information using enhanced descriptions from database
+        """
+        from core.models import ParameterEnhancement
+        
+        # Use enhanced descriptions if available
+        description = db_endpoint.display_description
+        summary = db_endpoint.display_summary
+        
+        tool_info = {
+            'name': db_endpoint.tool_name or self._generate_tool_name(endpoint_data),
+            'description': description or endpoint_data.get('summary', ''),
+            'summary': summary or endpoint_data.get('summary', ''),
+            'method': endpoint_data['method'],
+            'path': endpoint_data['path'],
+            'operation_id': endpoint_data.get('operation_id', ''),
+            'parameters': self._generate_enhanced_tool_parameters(endpoint_data, db_endpoint),
+            'request_body': endpoint_data.get('request_body', {}),
+            'responses': endpoint_data.get('responses', {}),
+            'tags': endpoint_data.get('tags', []),
+        }
+        
+        return tool_info
+    
+    def _generate_enhanced_tool_parameters(self, endpoint_data: Dict[str, Any], db_endpoint) -> Dict[str, Any]:
+        """
+        Generate tool parameters using enhanced descriptions from database
+        """
+        parameters = {
+            'type': 'object',
+            'properties': {},
+            'required': []
+        }
+        
+        # Get parameter enhancements
+        enhancements = {pe.parameter_name: pe for pe in db_endpoint.parameter_enhancements.all()}
+        
+        # Add path parameters
+        for param in endpoint_data.get('parameters', []):
+            if param['in'] == 'path':
+                param_name = param['name']
+                enhancement = enhancements.get(param_name)
+                
+                parameters['properties'][param_name] = {
+                    'type': param.get('type', 'string'),
+                    'description': enhancement.enhanced_description if enhancement else param.get('description', ''),
+                }
+                if param.get('required', False):
+                    parameters['required'].append(param_name)
+        
+        # Add query parameters
+        for param in endpoint_data.get('parameters', []):
+            if param['in'] == 'query':
+                param_name = param['name']
+                enhancement = enhancements.get(param_name)
+                
+                parameters['properties'][param_name] = {
+                    'type': param.get('type', 'string'),
+                    'description': enhancement.enhanced_description if enhancement else param.get('description', ''),
+                }
+                if param.get('required', False):
+                    parameters['required'].append(param_name)
+        
+        # Add request body parameters if present
+        request_body = endpoint_data.get('request_body', {})
+        if request_body and request_body.get('schema'):
+            self._add_enhanced_request_body_parameters(parameters, request_body['schema'], enhancements)
+        
+        return parameters
+    
+    def _add_enhanced_request_body_parameters(self, parameters: Dict[str, Any], schema: Dict[str, Any], enhancements: Dict):
+        """
+        Add request body parameters with enhanced descriptions to the parameters structure
+        """
+        if schema.get('type') == 'object':
+            properties = schema.get('properties', {})
+            required = schema.get('required', [])
+            
+            for prop_name, prop_schema in properties.items():
+                enhancement = enhancements.get(prop_name)
+                
+                parameters['properties'][prop_name] = {
+                    'type': prop_schema.get('type', 'string'),
+                    'description': enhancement.enhanced_description if enhancement else prop_schema.get('description', ''),
+                }
+                if prop_name in required:
+                    parameters['required'].append(prop_name)
     
     def _generate_tool_info(self, endpoint: Dict[str, Any]) -> Dict[str, Any]:
         """

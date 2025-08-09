@@ -1,0 +1,470 @@
+{% extends 'core/base.html' %}
+{% load static %}
+
+{% block title %}Enhance API Endpoints{% endblock %}
+
+{% block extra_css %}
+<style>
+    .endpoint-card {
+        border: 1px solid #dee2e6;
+        border-radius: 0.5rem;
+        margin-bottom: 1rem;
+        transition: all 0.3s ease;
+    }
+    
+    .endpoint-card:hover {
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    
+    .endpoint-card.enhanced {
+        border-left: 4px solid #28a745;
+    }
+    
+    .endpoint-card.needs-enhancement {
+        border-left: 4px solid #ffc107;
+    }
+    
+    .method-badge {
+        font-weight: bold;
+        font-size: 0.8rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.25rem;
+    }
+    
+    .method-get { background-color: #28a745; color: white; }
+    .method-post { background-color: #007bff; color: white; }
+    .method-put { background-color: #ffc107; color: black; }
+    .method-patch { background-color: #6f42c1; color: white; }
+    .method-delete { background-color: #dc3545; color: white; }
+    
+    .parameter-item {
+        background: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 0.25rem;
+        padding: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+    
+    .parameter-item.enhanced {
+        border-left: 3px solid #28a745;
+    }
+    
+    .enhancement-status {
+        font-size: 0.9rem;
+        font-weight: bold;
+    }
+    
+    .enhancement-status.enhanced {
+        color: #28a745;
+    }
+    
+    .enhancement-status.needs-enhancement {
+        color: #ffc107;
+    }
+    
+    .progress-indicator {
+        background: linear-gradient(45deg, #007bff, #28a745);
+        border-radius: 0.5rem;
+        padding: 1rem;
+        color: white;
+        margin-bottom: 2rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-md-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h2><i class="fas fa-edit"></i> Enhance API Endpoints</h2>
+                    <p class="text-muted">Review and enhance endpoint descriptions for better tool generation</p>
+                </div>
+                <div>
+                    <button class="btn btn-success" id="regenerateYamlBtn">
+                        <i class="fas fa-sync"></i> Regenerate YAML with Enhancements
+                    </button>
+                    <a href="/" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> Back to Home
+                    </a>
+                </div>
+            </div>
+
+            <!-- Progress Indicator -->
+            <div class="progress-indicator" id="progressIndicator">
+                <div class="row">
+                    <div class="col-md-3">
+                        <h5><i class="fas fa-tasks"></i> Endpoints</h5>
+                        <div class="h4" id="endpointProgress">0/0</div>
+                    </div>
+                    <div class="col-md-3">
+                        <h5><i class="fas fa-cogs"></i> Parameters</h5>
+                        <div class="h4" id="parameterProgress">0/0</div>
+                    </div>
+                    <div class="col-md-3">
+                        <h5><i class="fas fa-file-code"></i> YAML File</h5>
+                        <div class="h4" id="yamlFileName">Loading...</div>
+                    </div>
+                    <div class="col-md-3">
+                        <h5><i class="fas fa-chart-pie"></i> Completion</h5>
+                        <div class="h4" id="completionPercentage">0%</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Endpoints List -->
+            <div id="endpointsList">
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="sr-only">Loading...</span>
+                    </div>
+                    <p class="mt-2">Loading endpoints...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Enhanced Description Modal -->
+<div class="modal fade" id="enhanceModal" tabindex="-1" role="dialog" aria-labelledby="enhanceModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="enhanceModalLabel">Enhance Endpoint</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="enhanceForm">
+                    <div class="form-group">
+                        <label for="endpointPath">Endpoint</label>
+                        <input type="text" class="form-control" id="endpointPath" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label for="enhancedSummary">Enhanced Summary</label>
+                        <input type="text" class="form-control" id="enhancedSummary" 
+                               placeholder="Brief summary of what this endpoint does">
+                    </div>
+                    <div class="form-group">
+                        <label for="enhancedDescription">Enhanced Description</label>
+                        <textarea class="form-control" id="enhancedDescription" rows="5"
+                                  placeholder="Detailed description of the endpoint functionality, parameters, and expected behavior"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Original Description</label>
+                        <div class="alert alert-light" id="originalDescription">No original description available</div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveEnhancementBtn">Save Enhancement</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Parameter Enhancement Modal -->
+<div class="modal fade" id="parameterModal" tabindex="-1" role="dialog" aria-labelledby="parameterModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="parameterModalLabel">Enhance Parameter</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="parameterForm">
+                    <div class="form-group">
+                        <label for="parameterName">Parameter Name</label>
+                        <input type="text" class="form-control" id="parameterName" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label for="parameterType">Type</label>
+                        <input type="text" class="form-control" id="parameterType" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label for="enhancedParameterDescription">Enhanced Description</label>
+                        <textarea class="form-control" id="enhancedParameterDescription" rows="3"
+                                  placeholder="Clear description of what this parameter does and what values are expected"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Original Description</label>
+                        <div class="alert alert-light" id="originalParameterDescription">No original description available</div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveParameterEnhancementBtn">Save Enhancement</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    $(document).ready(function() {
+        let currentYamlFileId = null;
+        let currentEndpointId = null;
+        let currentParameterName = null;
+        
+        // Get YAML file ID from URL parameter
+        const urlParams = new URLSearchParams(window.location.search);
+        currentYamlFileId = urlParams.get('yaml_file');
+        
+        if (!currentYamlFileId) {
+            showError('No YAML file specified. Please select a YAML file from the main page.');
+            return;
+        }
+        
+        // Load endpoints and enhancement summary
+        loadEndpoints();
+        loadEnhancementSummary();
+        
+        // Event handlers
+        $('#saveEnhancementBtn').click(saveEndpointEnhancement);
+        $('#saveParameterEnhancementBtn').click(saveParameterEnhancement);
+        $('#regenerateYamlBtn').click(regenerateYamlWithEnhancements);
+        
+        function loadEndpoints() {
+            $.get(`/api/tools-generator/endpoints/?yaml_file=${currentYamlFileId}`)
+                .done(function(response) {
+                    // Extract the results array from the paginated response
+                    const endpoints = response.results || response;
+                    displayEndpoints(endpoints);
+                })
+                .fail(function(xhr) {
+                    showError('Failed to load endpoints: ' + (xhr.responseJSON?.message || 'Unknown error'));
+                });
+        }
+        
+        function loadEnhancementSummary() {
+            $.get(`/api/tools-generator/endpoints/enhancement_summary/?yaml_file=${currentYamlFileId}`)
+                .done(function(response) {
+                    updateProgressIndicator(response.data);
+                })
+                .fail(function(xhr) {
+                    console.error('Failed to load enhancement summary:', xhr);
+                });
+        }
+        
+        function displayEndpoints(endpoints) {
+            const container = $('#endpointsList');
+            
+            // Ensure endpoints is an array
+            if (!Array.isArray(endpoints)) {
+                console.error('Expected endpoints to be an array, got:', typeof endpoints, endpoints);
+                container.html(`
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        Invalid endpoints data received. Please try refreshing the page.
+                    </div>
+                `);
+                return;
+            }
+            
+            if (endpoints.length === 0) {
+                container.html(`
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        No endpoints found for this YAML file. This might mean the endpoints were not properly saved during YAML generation.
+                    </div>
+                `);
+                return;
+            }
+            
+            let html = '';
+            
+            endpoints.forEach(endpoint => {
+                const hasEnhancements = endpoint.enhanced_description || endpoint.enhanced_summary;
+                const cardClass = hasEnhancements ? 'enhanced' : 'needs-enhancement';
+                
+                html += `
+                    <div class="endpoint-card ${cardClass}">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-3">
+                                <div>
+                                    <span class="method-badge method-${endpoint.method.toLowerCase()}">${endpoint.method.toUpperCase()}</span>
+                                    <strong class="ml-2">${endpoint.path}</strong>
+                                </div>
+                                <div class="enhancement-status ${hasEnhancements ? 'enhanced' : 'needs-enhancement'}">
+                                    <i class="fas ${hasEnhancements ? 'fa-check-circle' : 'fa-exclamation-circle'}"></i>
+                                    ${hasEnhancements ? 'Enhanced' : 'Needs Enhancement'}
+                                </div>
+                            </div>
+                            
+                            <div class="row">
+                                <div class="col-md-8">
+                                    <h6>Description</h6>
+                                    <p class="mb-2">${endpoint.display_description || endpoint.description || 'No description available'}</p>
+                                    
+                                    ${endpoint.enhanced_description ? `
+                                        <div class="alert alert-success mb-2">
+                                            <strong>Enhanced:</strong> ${endpoint.enhanced_description}
+                                        </div>
+                                    ` : ''}
+                                    
+                                    <h6>Parameters (${endpoint.parameters.length})</h6>
+                                    <div class="parameters-list">
+                                        ${displayParameters(endpoint)}
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <button class="btn btn-primary btn-block mb-2" 
+                                            onclick="enhanceEndpoint(${endpoint.id}, '${endpoint.method.toUpperCase()} ${endpoint.path}', '${endpoint.summary || ''}', '${endpoint.description || ''}', '${endpoint.enhanced_summary || ''}', '${endpoint.enhanced_description || ''}')">
+                                        <i class="fas fa-edit"></i> Enhance Description
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            container.html(html);
+        }
+        
+        function displayParameters(endpoint) {
+            if (!endpoint.parameters || endpoint.parameters.length === 0) {
+                return '<p class="text-muted">No parameters</p>';
+            }
+            
+            let html = '';
+            endpoint.parameters.forEach(param => {
+                // Check if parameter has enhancement (this would need to be included in the endpoint data)
+                html += `
+                    <div class="parameter-item">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <strong>${param.name}</strong>
+                                <span class="badge badge-secondary ml-1">${param.type || 'string'}</span>
+                                ${param.required ? '<span class="badge badge-danger ml-1">required</span>' : ''}
+                                <p class="mb-1 mt-1">${param.description || 'No description'}</p>
+                            </div>
+                            <button class="btn btn-sm btn-outline-primary" 
+                                    onclick="enhanceParameter(${endpoint.id}, '${param.name}', '${param.type || 'string'}', ${param.required || false}, '${param.description || ''}')">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            return html;
+        }
+        
+        function updateProgressIndicator(data) {
+            $('#endpointProgress').text(data.endpoints_progress);
+            $('#parameterProgress').text(data.parameters_progress);
+            $('#yamlFileName').text(data.yaml_file);
+            
+            const endpointCompletion = data.total_endpoints > 0 ? Math.round((data.enhanced_endpoints / data.total_endpoints) * 100) : 0;
+            const parameterCompletion = data.total_parameters > 0 ? Math.round((data.enhanced_parameters / data.total_parameters) * 100) : 0;
+            const overallCompletion = Math.round((endpointCompletion + parameterCompletion) / 2);
+            
+            $('#completionPercentage').text(overallCompletion + '%');
+        }
+        
+        window.enhanceEndpoint = function(endpointId, path, summary, description, enhancedSummary, enhancedDescription) {
+            currentEndpointId = endpointId;
+            
+            $('#endpointPath').val(path);
+            $('#enhancedSummary').val(enhancedSummary);
+            $('#enhancedDescription').val(enhancedDescription);
+            $('#originalDescription').text(description || 'No original description available');
+            
+            $('#enhanceModal').modal('show');
+        };
+        
+        window.enhanceParameter = function(endpointId, paramName, paramType, isRequired, originalDescription) {
+            currentEndpointId = endpointId;
+            currentParameterName = paramName;
+            
+            $('#parameterName').val(paramName);
+            $('#parameterType').val(paramType + (isRequired ? ' (required)' : ''));
+            $('#enhancedParameterDescription').val('');
+            $('#originalParameterDescription').text(originalDescription || 'No original description available');
+            
+            $('#parameterModal').modal('show');
+        };
+        
+        function saveEndpointEnhancement() {
+            const data = {
+                enhanced_summary: $('#enhancedSummary').val(),
+                enhanced_description: $('#enhancedDescription').val()
+            };
+            
+            $.ajax({
+                url: `/api/tools-generator/endpoints/${currentEndpointId}/enhance_description/`,
+                method: 'PUT',
+                data: data,
+                success: function(response) {
+                    showSuccess('Endpoint enhanced successfully!');
+                    $('#enhanceModal').modal('hide');
+                    loadEndpoints();
+                    loadEnhancementSummary();
+                },
+                error: function(xhr) {
+                    showError('Failed to save enhancement: ' + (xhr.responseJSON?.message || 'Unknown error'));
+                }
+            });
+        }
+        
+        function saveParameterEnhancement() {
+            const data = {
+                parameter_name: currentParameterName,
+                enhanced_description: $('#enhancedParameterDescription').val()
+            };
+            
+            $.ajax({
+                url: `/api/tools-generator/endpoints/${currentEndpointId}/enhance_parameter/`,
+                method: 'POST',
+                data: data,
+                success: function(response) {
+                    showSuccess('Parameter enhanced successfully!');
+                    $('#parameterModal').modal('hide');
+                    loadEndpoints();
+                    loadEnhancementSummary();
+                },
+                error: function(xhr) {
+                    showError('Failed to save parameter enhancement: ' + (xhr.responseJSON?.message || 'Unknown error'));
+                }
+            });
+        }
+        
+        function regenerateYamlWithEnhancements() {
+            $('#regenerateYamlBtn').prop('disabled', true).html('<i class="fas fa-spin fa-spinner"></i> Regenerating...');
+            
+            $.ajax({
+                url: `/api/tools-generator/yaml-files/${currentYamlFileId}/regenerate_with_enhancements/`,
+                method: 'POST',
+                success: function(response) {
+                    showSuccess('YAML file regenerated with enhancements successfully!');
+                    // Optionally redirect to view the new file or offer download
+                },
+                error: function(xhr) {
+                    showError('Failed to regenerate YAML: ' + (xhr.responseJSON?.message || 'Unknown error'));
+                },
+                complete: function() {
+                    $('#regenerateYamlBtn').prop('disabled', false).html('<i class="fas fa-sync"></i> Regenerate YAML with Enhancements');
+                }
+            });
+        }
+        
+        function showSuccess(message) {
+            // You can implement a toast notification here
+            alert('Success: ' + message);
+        }
+        
+        function showError(message) {
+            // You can implement a toast notification here
+            alert('Error: ' + message);
+        }
+    });
+</script>
+{% endblock %}

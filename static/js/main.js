@@ -238,6 +238,9 @@ class APIManager {
                         <p class="mb-0 small">${file.tools_count} tools</p>
                     </div>
                     <div class="btn-group btn-group-sm">
+                        <button class="btn btn-outline-warning enhance-endpoints-btn" data-id="${file.id}" title="Enhance endpoint descriptions">
+                            <i class="fas fa-edit"></i> Enhance
+                        </button>
                         <button class="btn btn-outline-success create-server-btn" data-id="${file.id}">
                             <i class="fas fa-server"></i> Create Server
                         </button>
@@ -256,6 +259,7 @@ class APIManager {
         container.html(html);
 
         // Add event listeners for new buttons
+        $('.enhance-endpoints-btn').on('click', this.handleEnhanceEndpoints.bind(this));
         $('.create-server-btn').on('click', this.handleCreateServer.bind(this));
         // Note: Download functionality to be implemented later
         $('.download-yaml-btn').on('click', function() {
@@ -295,6 +299,13 @@ class APIManager {
         } catch (error) {
             this.showMessage('Error creating server: ' + error.message, 'error');
         }
+    }
+
+    handleEnhanceEndpoints(e) {
+        const yamlFileId = $(e.target).closest('.enhance-endpoints-btn').data('id');
+        
+        // Redirect to the enhancement page with the YAML file ID
+        window.location.href = `/enhance-endpoints/?yaml_file=${yamlFileId}`;
     }
 
     async loadMCPServers() {
