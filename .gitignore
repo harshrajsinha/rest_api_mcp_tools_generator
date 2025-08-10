@@ -1,3 +1,4 @@
 *.pyc
 /venv
 .env
+/generated_yaml_files

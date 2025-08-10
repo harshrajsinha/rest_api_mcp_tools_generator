@@ -437,14 +437,10 @@ $(document).ready(function() {
 
     // Load enhancement data
     function loadEnhancementData() {
-        // Get yaml_file parameter from URL
-        const urlParams = new URLSearchParams(window.location.search);
-        const yamlFileId = urlParams.get('yaml_file') || '1'; // default to 1 if not provided
-        
         Promise.all([
             $.get('/api/tools-generator/endpoints/'),
-            $.get('/api/tools-generator/parameter-enhancements/'),
-            $.get(`/api/tools-generator/endpoints/enhancement_summary/?yaml_file=${yamlFileId}`)
+            $.get('/api/tools-generator/parameters/'),
+            $.get('/api/tools-generator/endpoints/enhancement_summary/')
         ]).then(([endpointsResponse, parametersResponse, summaryResponse]) => {
             const endpoints = endpointsResponse.results || endpointsResponse;
             const parameters = parametersResponse.results || parametersResponse;
@@ -608,7 +604,7 @@ $(document).ready(function() {
                 });
         } else if (currentType === 'parameter' && currentParameterId) {
             // Load parameter data
-            $.get(`/api/tools-generator/parameter-enhancements/${currentParameterId}/`)
+            $.get(`/api/tools-generator/parameters/${currentParameterId}/`)
                 .then(param => {
                     $('#originalDescription').text(param.description || 'No description available');
                     $('#enhancedDescription').val(param.enhanced_description || '');
@@ -658,7 +654,7 @@ $(document).ready(function() {
     // Save parameter enhancement
     function saveParameterEnhancement(parameterId, description) {
         $.ajax({
-            url: `/api/tools-generator/parameter-enhancements/${parameterId}/enhance_parameter/`,
+            url: `/api/tools-generator/parameters/${parameterId}/enhance_parameter/`,
             method: 'POST',
             data: {
                 enhanced_description: description

@@ -29,10 +29,13 @@ def generate_yaml_from_swagger(api_config_id):
             }
         )
         
-        if not created:
-            yaml_file.generation_status = 'processing'
-            yaml_file.error_message = ''
-            yaml_file.save()
+        # Ensure file name is set even for existing records
+        if not yaml_file.file_name or yaml_file.file_name == '':
+            yaml_file.file_name = f"{api_config.name.lower().replace(' ', '_')}_tools.yaml"
+        
+        yaml_file.generation_status = 'processing'
+        yaml_file.error_message = ''
+        yaml_file.save()
         
         # Parse Swagger specification
         parser = SwaggerParser(api_config.swagger_url, api_config.api_base_url)
