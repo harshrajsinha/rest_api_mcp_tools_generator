@@ -431,23 +431,139 @@ $(document).ready(function() {
     let currentEndpointId = null;
     let currentParameterId = null;
     let currentType = null; // 'endpoint' or 'parameter'
-
+    let yamlFileId = '{{ yaml_file_id }}';
+    
     // Load endpoints and statistics on page load
-    loadEnhancementData();
+    if (yamlFileId && yamlFileId !== 'None') {
+        loadEndpointsWithDescriptions();
+    } else {
+        showError('No YAML file specified. Please select a YAML file to enhance.');
+    }
 
-    // Load enhancement data
-    function loadEnhancementData() {
-        Promise.all([
-            $.get('/api/tools-generator/endpoints/'),
-            $.get('/api/tools-generator/parameters/'),
-            $.get('/api/tools-generator/endpoints/enhancement_summary/')
-        ]).then(([endpointsResponse, parametersResponse, summaryResponse]) => {
-            const endpoints = endpointsResponse.results || endpointsResponse;
-            const parameters = parametersResponse.results || parametersResponse;
-            const summary = summaryResponse;
+    // Load endpoints with their descriptions from YAML and database
+    function loadEndpointsWithDescriptions() {
+        showLoading('Loading endpoints...');
+        
+        $.get(`/api/tools-generator/yaml-files/endpoints_with_descriptions/?yaml_file=${yamlFileId}`)
+        .done(function(response) {
+            hideLoading();
+            if (response.status === 'success') {
+                displayEndpointsWithDescriptions(response.data);
+                loadEnhancementSummary();
+            } else {
+                showError('Error loading endpoints: ' + response.message);
+            }
+        })
+        .fail(function(xhr) {
+            hideLoading();
+            showError('Failed to load endpoints: ' + (xhr.responseJSON?.message || 'Unknown error'));
+        });
+    }
+
+    // Load enhancement summary
+    function loadEnhancementSummary() {
+        $.get(`/api/tools-generator/yaml-files/enhancement_summary/?yaml_file=${yamlFileId}`)
+        .done(function(response) {
+            if (response.status === 'success') {
+                displayStatistics(response.data);
+            }
+        });
+    }
+
+    // Display endpoints with descriptions
+    function displayEndpointsWithDescriptions(data) {
+        const container = $('#endpointsList');
+        
+        if (!data.endpoints || data.endpoints.length === 0) {
+            container.html('<p class="text-muted">No endpoints found for enhancement.</p>');
+            return;
+        }
+
+        const endpointsHtml = data.endpoints.map(endpoint => {
+            const statusBadge = endpoint.has_enhancement 
+                ? '<span class="status-badge status-enhanced">Enhanced</span>'
+                : '<span class="status-badge status-needs-enhancement">Needs Enhancement</span>';
             
-            displayStatistics(summary, endpoints);
-            displayEndpoints(endpoints, parameters);
+            const originalDesc = endpoint.original_description || 'No description available';
+            const enhancedDesc = endpoint.enhanced_description || '';
+            const currentDescription = enhancedDesc || originalDesc;
+            
+            return `
+                <div class="endpoint-card" data-endpoint-id="${endpoint.id}">
+                    <div class="endpoint-header">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div class="endpoint-title">
+                                <span class="method-badge method-${endpoint.method.toLowerCase()}">${endpoint.method}</span>
+                                <span class="endpoint-path">${endpoint.path}</span>
+                            </div>
+                            ${statusBadge}
+                        </div>
+                    </div>
+                    <div class="endpoint-body">
+                        <div class="endpoint-content">
+                            <div class="description-section">
+                                <h6>Current Description</h6>
+                                <div class="${enhancedDesc ? 'enhanced-box' : 'description-box'}">
+                                    ${currentDescription}
+                                </div>
+                                
+                                ${endpoint.original_summary ? `
+                                <h6>Original Summary</h6>
+                                <div class="description-box">${endpoint.original_summary}</div>
+                                ` : ''}
+                                
+                                ${endpoint.enhanced_summary ? `
+                                <h6>Enhanced Summary</h6>
+                                <div class="enhanced-box">${endpoint.enhanced_summary}</div>
+                                ` : ''}
+                                
+                                ${Object.keys(endpoint.parameters || {}).length > 0 ? `
+                                <h6>Parameters</h6>
+                                <div class="parameters-list">
+                                    ${Object.entries(endpoint.parameters).map(([name, param]) => {
+                                        const enhancement = endpoint.parameter_enhancements[name];
+                                        const paramDesc = enhancement?.enhanced_description || param.description || 'No description';
+                                        return `
+                                            <div class="parameter-item">
+                                                <strong>${name}</strong> (${param.type || 'string'})
+                                                ${param.required ? '<span class="badge badge-warning">Required</span>' : ''}
+                                                <div class="${enhancement ? 'enhanced-box' : 'description-box'} mt-1">
+                                                    ${paramDesc}
+                                                </div>
+                                                <button class="btn btn-sm btn-outline-info enhance-parameter-btn" 
+                                                        data-endpoint-id="${endpoint.id}" 
+                                                        data-parameter-name="${name}"
+                                                        data-parameter='${JSON.stringify(param)}'>
+                                                    <i class="fas fa-edit"></i> Enhance Parameter
+                                                </button>
+                                            </div>
+                                        `;
+                                    }).join('')}
+                                </div>
+                                ` : ''}
+                            </div>
+                            <div class="actions-section">
+                                <button class="btn btn-enhance-endpoint enhance-endpoint-btn" 
+                                        data-endpoint-id="${endpoint.id}"
+                                        data-endpoint='${JSON.stringify(endpoint)}'>
+                                    <i class="fas fa-edit"></i> Enhance Description
+                                </button>
+                                
+                                <button class="btn btn-outline-success generate-llm-btn" 
+                                        data-endpoint='${JSON.stringify(endpoint)}'>
+                                    <i class="fas fa-magic"></i> Generate with LLM
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        container.html(endpointsHtml);
+        
+        // Bind event handlers
+        bindEventHandlers();
         }).catch(error => {
             console.error('Error loading data:', error);
             $('#emptyState').show();

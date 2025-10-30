@@ -418,3 +418,90 @@ class MCPRegistryViewSet(viewsets.ViewSet):
                 'status': 'error',
                 'message': f'Failed to generate bulk Claude Desktop configuration: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['post'])
+    def download_mcp_package(self, request):
+        """
+        Generate and download MCP server package directly from YAML file ID
+        """
+        yaml_file_id = request.data.get('yaml_file_id')
+        server_name = request.data.get('server_name')
+        
+        if not yaml_file_id:
+            return Response({
+                'status': 'error',
+                'message': 'yaml_file_id is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not server_name:
+            server_name = f"mcp_server_{yaml_file_id}"
+        
+        try:
+            # Get YAML file
+            yaml_file = GeneratedYAMLFile.objects.get(id=yaml_file_id)
+            
+            # Check if enhanced version exists
+            yaml_file_path = yaml_file.file_path
+            enhanced_path = yaml_file_path.replace('.yaml', '_enhanced.yaml').replace('.yml', '_enhanced.yml')
+            
+            # Use enhanced version if available, otherwise use original
+            if os.path.exists(enhanced_path):
+                yaml_file_path = enhanced_path
+                server_name = server_name + "_enhanced"
+            
+            # Create temporary directory for package
+            temp_dir = tempfile.mkdtemp()
+            package_name = f"{server_name}_mcp_package"
+            package_dir = os.path.join(temp_dir, package_name)
+            
+            try:
+                # Create the MCP server package
+                created_files = create_mcp_server_package(
+                    yaml_file_path=yaml_file_path,
+                    server_name=server_name,
+                    output_dir=package_dir,
+                    include_config=True
+                )
+                
+                # Create ZIP file
+                zip_path = os.path.join(temp_dir, f"{package_name}.zip")
+                with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                    package_path = Path(package_dir)
+                    for file_path in package_path.rglob('*'):
+                        if file_path.is_file():
+                            arcname = file_path.relative_to(package_path)
+                            zipf.write(file_path, arcname)
+                
+                # Read ZIP file for response
+                with open(zip_path, 'rb') as f:
+                    zip_data = f.read()
+                
+                response = HttpResponse(
+                    zip_data,
+                    content_type='application/zip'
+                )
+                response['Content-Disposition'] = f'attachment; filename="{package_name}.zip"'
+                
+                return response
+                
+            finally:
+                # Cleanup temporary directory
+                import threading
+                def cleanup():
+                    import time
+                    time.sleep(5)  # Wait 5 seconds before cleanup
+                    shutil.rmtree(temp_dir, ignore_errors=True)
+                
+                threading.Thread(target=cleanup).start()
+                
+        except GeneratedYAMLFile.DoesNotExist:
+            return Response({
+                'status': 'error',
+                'message': 'YAML file not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+                
+        except Exception as e:
+            return Response({
+                'status': 'error',
+                'message': f'Failed to generate MCP package: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

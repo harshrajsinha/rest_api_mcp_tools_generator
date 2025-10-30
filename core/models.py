@@ -67,6 +67,17 @@ class GeneratedYAMLFile(models.Model):
     
     def __str__(self):
         return f"{self.api_configuration.name} - {self.file_name or 'Untitled'}"
+    
+    def get_yaml_content(self):
+        """Parse and return YAML content as Python dict"""
+        if not self.yaml_content:
+            return {}
+        
+        try:
+            import yaml
+            return yaml.safe_load(self.yaml_content)
+        except yaml.YAMLError:
+            return {}
 
 
 class APIEndpoint(models.Model):

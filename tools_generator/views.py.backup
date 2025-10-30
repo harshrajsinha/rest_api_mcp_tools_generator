@@ -169,7 +169,65 @@ class GeneratedYAMLFileViewSet(viewsets.ModelViewSet):
                 'error': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
-
+    @action(detail=True, methods=['post'])
+    def regenerate_with_enhancements(self, request, pk=None):
+        """
+        Regenerate YAML file using enhanced descriptions
+        """
+        yaml_file = self.get_object()
+        api_config = yaml_file.api_configuration
+        
+        try:
+            # Parse the original Swagger spec again
+            parser = SwaggerParser(api_config.swagger_url, api_config.api_base_url)
+            spec = parser.fetch_swagger_spec()
+            endpoints = parser.extract_endpoints()
+            
+            # Create API config dictionary
+            api_config_dict = {
+                'name': api_config.name,
+                'description': api_config.description,
+                'api_base_url': api_config.api_base_url,
+                'swagger_url': api_config.swagger_url,
+                'auth_type': api_config.auth_type,
+                'auth_config': api_config.auth_config,
+            }
+            
+            # Generate enhanced YAML
+            generator = YAMLGenerator(api_config_dict, endpoints, yaml_file)
+            enhanced_yaml = generator.generate_enhanced_yaml_structure()
+            
+            # Save the enhanced YAML file
+            yaml_dir = Path(settings.BASE_DIR) / 'generated_yaml_files'
+            yaml_dir.mkdir(exist_ok=True)
+            
+            # Create new filename with _enhanced suffix
+            base_name = yaml_file.file_name.replace('.yaml', '').replace('.yml', '')
+            enhanced_filename = f"{base_name}_enhanced.yaml"
+            enhanced_file_path = yaml_dir / enhanced_filename
+            
+            with open(enhanced_file_path, 'w', encoding='utf-8') as f:
+                yaml.dump(enhanced_yaml, f, default_flow_style=False, allow_unicode=True)
+            
+            # Update the YAML file record
+            yaml_file.yaml_content = yaml.dump(enhanced_yaml, default_flow_style=False, allow_unicode=True)
+            yaml_file.file_name = enhanced_filename
+            yaml_file.file_path = str(enhanced_file_path)
+            yaml_file.save()
+            
+            return Response({
+                'status': 'success',
+                'message': 'YAML file regenerated with enhancements successfully',
+                'file_name': enhanced_filename,
+                'file_path': str(enhanced_file_path)
+            })
+        
+        except Exception as e:
+            logger.error(f"Error regenerating YAML with enhancements: {e}")
+            return Response({
+                'status': 'error',
+                'message': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     @action(detail=True, methods=['post'])
     def generate_tools(self, request, pk=None):
@@ -219,20 +277,6 @@ class GeneratedYAMLFileViewSet(viewsets.ModelViewSet):
             
             # Load the YAML file to get original descriptions
             yaml_content = yaml_file.get_yaml_content()
-            
-            # If yaml_content is empty, try reading from file path
-            if not yaml_content and yaml_file.file_path:
-                try:
-                    import yaml
-                    from pathlib import Path
-                    file_path = Path(yaml_file.file_path)
-                    if file_path.exists():
-                        with open(file_path, 'r', encoding='utf-8') as f:
-                            yaml_content = yaml.safe_load(f)
-                except Exception as e:
-                    logger.error(f"Error reading YAML file from path: {e}")
-                    yaml_content = {}
-            
             yaml_endpoints = yaml_content.get('tools', [])
             
             # Get database endpoints
@@ -416,251 +460,6 @@ class GeneratedYAMLFileViewSet(viewsets.ModelViewSet):
             return Response({
                 'status': 'error',
                 'message': f'Error generating parameter description: {str(e)}'
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
-    @action(detail=False, methods=['post'])
-    def save_enhancement(self, request):
-        """
-        Save enhancement for an endpoint (create if doesn't exist)
-        """
-        try:
-            yaml_file_id = request.data.get('yaml_file_id')
-            endpoint_data = request.data.get('endpoint_data')
-            enhanced_summary = request.data.get('enhanced_summary', '')
-            enhanced_description = request.data.get('enhanced_description', '')
-            
-            if not yaml_file_id or not endpoint_data:
-                return Response({
-                    'status': 'error',
-                    'message': 'yaml_file_id and endpoint_data are required'
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            # Get the YAML file
-            yaml_file = GeneratedYAMLFile.objects.get(id=yaml_file_id)
-            
-            # Get or create the endpoint
-            method = endpoint_data.get('method', '').upper()
-            path = endpoint_data.get('path', '')
-            
-            endpoint, created = APIEndpoint.objects.get_or_create(
-                yaml_file=yaml_file,
-                method=method,
-                path=path,
-                defaults={
-                    'operation_id': endpoint_data.get('operation_id', ''),
-                    'summary': endpoint_data.get('original_summary', ''),
-                    'description': endpoint_data.get('original_description', ''),
-                    'parameters': endpoint_data.get('parameters', []),
-                    'enhanced_summary': enhanced_summary,
-                    'enhanced_description': enhanced_description,
-                }
-            )
-            
-            # If endpoint already exists, update the enhanced fields
-            if not created:
-                endpoint.enhanced_summary = enhanced_summary
-                endpoint.enhanced_description = enhanced_description
-                endpoint.save()
-            
-            return Response({
-                'status': 'success',
-                'message': 'Enhancement saved successfully',
-                'endpoint_id': endpoint.id
-            })
-            
-        except GeneratedYAMLFile.DoesNotExist:
-            return Response({
-                'status': 'error',
-                'message': 'YAML file not found'
-            }, status=status.HTTP_404_NOT_FOUND)
-        except Exception as e:
-            logger.error(f"Error saving enhancement: {str(e)}")
-            return Response({
-                'status': 'error',
-                'message': f'Error saving enhancement: {str(e)}'
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
-    @action(detail=False, methods=['post'])
-    def bulk_generate_descriptions(self, request):
-        """
-        Generate LLM descriptions for multiple endpoints in bulk
-        """
-        try:
-            from .llm_service import llm_service
-            
-            yaml_file_id = request.data.get('yaml_file_id')
-            endpoints_data = request.data.get('endpoints_data', [])
-            
-            if not yaml_file_id or not endpoints_data:
-                return Response({
-                    'status': 'error',
-                    'message': 'yaml_file_id and endpoints_data are required'
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            if not llm_service.is_available():
-                return Response({
-                    'status': 'error',
-                    'message': 'LLM service is not available. Please configure Azure OpenAI API key in settings.'
-                }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
-            
-            # Get the YAML file
-            yaml_file = GeneratedYAMLFile.objects.get(id=yaml_file_id)
-            
-            results = []
-            successful = 0
-            errors = 0
-            
-            for endpoint_data in endpoints_data:
-                try:
-                    # Generate enhanced description
-                    enhanced = llm_service.generate_endpoint_description(endpoint_data)
-                    
-                    # Save enhancement
-                    method = endpoint_data.get('method', '').upper()
-                    path = endpoint_data.get('path', '')
-                    
-                    endpoint, created = APIEndpoint.objects.get_or_create(
-                        yaml_file=yaml_file,
-                        method=method,
-                        path=path,
-                        defaults={
-                            'operation_id': endpoint_data.get('operation_id', ''),
-                            'summary': endpoint_data.get('original_summary', ''),
-                            'description': endpoint_data.get('original_description', ''),
-                            'parameters': endpoint_data.get('parameters', []),
-                            'enhanced_summary': enhanced.get('summary', ''),
-                            'enhanced_description': enhanced.get('description', ''),
-                        }
-                    )
-                    
-                    # If endpoint already exists, update the enhanced fields
-                    if not created:
-                        endpoint.enhanced_summary = enhanced.get('summary', '')
-                        endpoint.enhanced_description = enhanced.get('description', '')
-                        endpoint.save()
-                    
-                    results.append({
-                        'endpoint': f"{method} {path}",
-                        'status': 'success',
-                        'enhanced_summary': enhanced.get('summary', ''),
-                        'enhanced_description': enhanced.get('description', '')
-                    })
-                    successful += 1
-                    
-                except Exception as e:
-                    logger.error(f"Error processing endpoint {endpoint_data.get('method', '')} {endpoint_data.get('path', '')}: {str(e)}")
-                    results.append({
-                        'endpoint': f"{endpoint_data.get('method', '')} {endpoint_data.get('path', '')}",
-                        'status': 'error',
-                        'message': str(e)
-                    })
-                    errors += 1
-            
-            return Response({
-                'status': 'success',
-                'message': f'Bulk generation completed. {successful} successful, {errors} errors.',
-                'results': results,
-                'summary': {
-                    'total': len(endpoints_data),
-                    'successful': successful,
-                    'errors': errors
-                }
-            })
-            
-        except GeneratedYAMLFile.DoesNotExist:
-            return Response({
-                'status': 'error',
-                'message': 'YAML file not found'
-            }, status=status.HTTP_404_NOT_FOUND)
-        except Exception as e:
-            logger.error(f"Error in bulk generation: {str(e)}")
-            return Response({
-                'status': 'error',
-                'message': f'Error in bulk generation: {str(e)}'
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
-    @action(detail=True, methods=['post'])
-    def regenerate_with_enhancements(self, request, pk=None):
-        """
-        Regenerate YAML file with all current enhancements
-        """
-        try:
-            yaml_file = self.get_object()
-            
-            # Parse the original Swagger spec again
-            parser = SwaggerParser(yaml_file.api_configuration.swagger_url, yaml_file.api_configuration.api_base_url)
-            spec = parser.fetch_swagger_spec()
-            endpoints = parser.extract_endpoints()
-            
-            # Get all enhanced endpoints from database
-            enhanced_endpoints = APIEndpoint.objects.filter(yaml_file=yaml_file)
-            enhanced_dict = {}
-            
-            for enhanced_ep in enhanced_endpoints:
-                key = f"{enhanced_ep.method.upper()}:{enhanced_ep.path}"
-                enhanced_dict[key] = enhanced_ep
-            
-            # Update endpoints with enhancements
-            for endpoint in endpoints:
-                endpoint_key = f"{endpoint.get('method', '').upper()}:{endpoint.get('path', '')}"
-                enhanced_ep = enhanced_dict.get(endpoint_key)
-                
-                if enhanced_ep:
-                    # Update with enhanced descriptions if available
-                    if enhanced_ep.enhanced_summary:
-                        endpoint['summary'] = enhanced_ep.enhanced_summary
-                    if enhanced_ep.enhanced_description:
-                        endpoint['description'] = enhanced_ep.enhanced_description
-            
-            # Create API config dictionary
-            api_config_dict = {
-                'name': yaml_file.api_configuration.name,
-                'description': yaml_file.api_configuration.description,
-                'api_base_url': yaml_file.api_configuration.api_base_url,
-                'swagger_url': yaml_file.api_configuration.swagger_url,
-                'auth_type': yaml_file.api_configuration.auth_type,
-                'auth_config': yaml_file.api_configuration.auth_config,
-            }
-            
-            # Generate enhanced YAML
-            generator = YAMLGenerator(api_config_dict, endpoints, yaml_file)
-            enhanced_yaml = generator.generate_yaml_structure()
-            
-            # Save the enhanced YAML file
-            yaml_dir = Path(settings.BASE_DIR) / 'generated_yaml_files'
-            yaml_dir.mkdir(exist_ok=True)
-            
-            # Create new filename with _enhanced suffix if not already present
-            base_name = yaml_file.file_name.replace('.yaml', '').replace('.yml', '')
-            if not base_name.endswith('_enhanced'):
-                enhanced_filename = f"{base_name}_enhanced.yaml"
-            else:
-                enhanced_filename = yaml_file.file_name
-            
-            enhanced_file_path = yaml_dir / enhanced_filename
-            
-            with open(enhanced_file_path, 'w', encoding='utf-8') as f:
-                yaml.dump(enhanced_yaml, f, default_flow_style=False, allow_unicode=True)
-            
-            # Update the YAML file record
-            yaml_file.yaml_content = yaml.dump(enhanced_yaml, default_flow_style=False, allow_unicode=True)
-            yaml_file.file_name = enhanced_filename
-            yaml_file.file_path = str(enhanced_file_path)
-            yaml_file.save()
-            
-            return Response({
-                'status': 'success',
-                'message': 'YAML file regenerated with enhancements successfully',
-                'file_name': enhanced_filename,
-                'file_path': str(enhanced_file_path),
-                'enhancements_applied': len([ep for ep in enhanced_endpoints if ep.enhanced_summary or ep.enhanced_description])
-            })
-        
-        except Exception as e:
-            logger.error(f"Error regenerating YAML with enhancements: {e}")
-            return Response({
-                'status': 'error',
-                'message': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -900,3 +699,167 @@ class APIEndpointViewSet(viewsets.ModelViewSet):
                 'status': 'error',
                 'message': 'YAML file not found'
             }, status=status.HTTP_404_NOT_FOUND)
+        if not yaml_file_id:
+            return Response({
+                'status': 'error',
+                'message': 'yaml_file parameter is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            yaml_file = GeneratedYAMLFile.objects.get(id=yaml_file_id)
+            
+            # Load the YAML file to get original descriptions
+            yaml_content = yaml_file.get_yaml_content()
+            yaml_endpoints = yaml_content.get('tools', [])
+            
+            # Get database endpoints
+            db_endpoints = APIEndpoint.objects.filter(yaml_file=yaml_file).prefetch_related('parameter_enhancements')
+            db_endpoints_dict = {f"{ep.method}:{ep.path}": ep for ep in db_endpoints}
+            
+            endpoints_data = []
+            
+            for yaml_endpoint in yaml_endpoints:
+                endpoint_key = f"{yaml_endpoint.get('method', '').upper()}:{yaml_endpoint.get('path', '')}"
+                db_endpoint = db_endpoints_dict.get(endpoint_key)
+                
+                # Get parameter enhancements
+                param_enhancements = {}
+                if db_endpoint:
+                    for pe in db_endpoint.parameter_enhancements.all():
+                        param_enhancements[pe.parameter_name] = {
+                            'enhanced_description': pe.enhanced_description
+                        }
+                
+                endpoint_data = {
+                    'id': db_endpoint.id if db_endpoint else None,
+                    'method': yaml_endpoint.get('method', '').upper(),
+                    'path': yaml_endpoint.get('path', ''),
+                    'original_summary': yaml_endpoint.get('summary', ''),
+                    'original_description': yaml_endpoint.get('description', ''),
+                    'enhanced_summary': db_endpoint.enhanced_summary if db_endpoint else '',
+                    'enhanced_description': db_endpoint.enhanced_description if db_endpoint else '',
+                    'parameters': yaml_endpoint.get('parameters', {}),
+                    'parameter_enhancements': param_enhancements,
+                    'has_enhancement': bool(db_endpoint and (db_endpoint.enhanced_summary or db_endpoint.enhanced_description)),
+                    'needs_enhancement': not bool(yaml_endpoint.get('description') or (db_endpoint and db_endpoint.enhanced_description))
+                }
+                endpoints_data.append(endpoint_data)
+            
+            return Response({
+                'status': 'success',
+                'data': {
+                    'yaml_file': {
+                        'id': yaml_file.id,
+                        'name': yaml_file.file_name,
+                        'api_name': yaml_file.api_configuration.name if yaml_file.api_configuration else 'Unknown API'
+                    },
+                    'endpoints': endpoints_data
+                }
+            })
+            
+        except GeneratedYAMLFile.DoesNotExist:
+            return Response({
+                'status': 'error',
+                'message': 'YAML file not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error loading endpoints with descriptions: {str(e)}")
+            return Response({
+                'status': 'error',
+                'message': f'Error loading endpoint data: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    @action(detail=False, methods=['post'])
+    def generate_llm_description(self, request):
+        """
+        Generate LLM-powered description for an endpoint
+        """
+        try:
+            from .llm_service import llm_service
+            
+            endpoint_data = request.data.get('endpoint_data', {})
+            if not endpoint_data:
+                return Response({
+                    'status': 'error',
+                    'message': 'endpoint_data is required'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            if not llm_service.is_available():
+                return Response({
+                    'status': 'error',
+                    'message': 'LLM service is not available. Please configure OpenAI API key in settings.'
+                }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+            
+            # Generate enhanced description
+            enhanced = llm_service.generate_endpoint_description(endpoint_data)
+            
+            return Response({
+                'status': 'success',
+                'data': {
+                    'enhanced_summary': enhanced.get('summary', ''),
+                    'enhanced_description': enhanced.get('description', '')
+                }
+            })
+            
+        except Exception as e:
+            logger.error(f"Error generating LLM description: {str(e)}")
+            return Response({
+                'status': 'error',
+                'message': f'Error generating description: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    @action(detail=False, methods=['post'])
+    def generate_llm_parameter_description(self, request):
+        """
+        Generate LLM-powered description for a parameter
+        """
+        try:
+            from .llm_service import llm_service
+            
+            param_data = request.data.get('parameter_data', {})
+            endpoint_context = request.data.get('endpoint_context', {})
+            
+            if not param_data:
+                return Response({
+                    'status': 'error',
+                    'message': 'parameter_data is required'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            if not llm_service.is_available():
+                return Response({
+                    'status': 'error',
+                    'message': 'LLM service is not available. Please configure OpenAI API key in settings.'
+                }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+            
+            # Generate enhanced parameter description
+            enhanced_description = llm_service.generate_parameter_description(param_data, endpoint_context)
+            
+            return Response({
+                'status': 'success',
+                'data': {
+                    'enhanced_description': enhanced_description
+                }
+            })
+            
+        except Exception as e:
+            logger.error(f"Error generating LLM parameter description: {str(e)}")
+            return Response({
+                'status': 'error',
+                'message': f'Error generating parameter description: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class ParameterEnhancementViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing parameter enhancements
+    """
+    queryset = ParameterEnhancement.objects.all()
+    serializer_class = ParameterEnhancementSerializer
+    permission_classes = [AllowAny]
+    
+    def get_queryset(self):
+        queryset = ParameterEnhancement.objects.all()
+        endpoint_id = self.request.query_params.get('endpoint', None)
+        if endpoint_id:
+            queryset = queryset.filter(endpoint_id=endpoint_id)
+        return queryset.select_related('endpoint')

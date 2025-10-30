@@ -244,8 +244,8 @@ class APIManager {
                         <button class="btn btn-outline-success create-server-btn" data-id="${file.id}">
                             <i class="fas fa-server"></i> Create Server
                         </button>
-                        <button class="btn btn-outline-primary download-yaml-btn" data-id="${file.id}">
-                            <i class="fas fa-download"></i>
+                        <button class="btn btn-outline-primary download-yaml-btn" data-id="${file.id}" title="Download MCP Server Package">
+                            <i class="fas fa-download"></i> MCP
                         </button>
                     </div>
                 </div>
@@ -261,10 +261,7 @@ class APIManager {
         // Add event listeners for new buttons
         $('.enhance-endpoints-btn').on('click', this.handleEnhanceEndpoints.bind(this));
         $('.create-server-btn').on('click', this.handleCreateServer.bind(this));
-        // Note: Download functionality to be implemented later
-        $('.download-yaml-btn').on('click', function() {
-            alert('Download functionality coming soon!');
-        });
+        $('.download-yaml-btn').on('click', this.handleDownloadMCPPackage.bind(this));
     }
 
     getStatusColor(status) {
@@ -298,6 +295,66 @@ class APIManager {
             }
         } catch (error) {
             this.showMessage('Error creating server: ' + error.message, 'error');
+        }
+    }
+
+    async handleDownloadMCPPackage(e) {
+        const yamlFileId = $(e.target).closest('.download-yaml-btn').data('id');
+        const serverName = prompt('Enter server name for the MCP package:', `mcp_server_${yamlFileId}`);
+        
+        if (!serverName) return;
+
+        const btn = $(e.target).closest('.download-yaml-btn');
+        const originalHtml = btn.html();
+        btn.html('<i class="fas fa-spinner fa-spin"></i>').prop('disabled', true);
+
+        try {
+            // Make request to download endpoint
+            const response = await fetch('/api/mcp-server/registry/download_mcp_package/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': this.getCSRFToken()
+                },
+                body: JSON.stringify({
+                    yaml_file_id: yamlFileId,
+                    server_name: serverName
+                })
+            });
+
+            if (response.ok) {
+                // Handle file download
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                
+                // Extract filename from response headers or use default
+                const contentDisposition = response.headers.get('Content-Disposition');
+                let filename = `${serverName}_mcp_package.zip`;
+                if (contentDisposition) {
+                    const matches = /filename="([^"]*)"/.exec(contentDisposition);
+                    if (matches) {
+                        filename = matches[1];
+                    }
+                }
+                a.download = filename;
+                
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                
+                this.showMessage('MCP server package downloaded successfully!', 'success');
+            } else {
+                const errorData = await response.json();
+                this.showMessage('Error downloading package: ' + (errorData.message || 'Unknown error'), 'error');
+            }
+        } catch (error) {
+            this.showMessage('Error downloading package: ' + error.message, 'error');
+        } finally {
+            btn.html(originalHtml).prop('disabled', false);
         }
     }
 
@@ -521,6 +578,39 @@ class APIManager {
             });
         }, 8000);
     }
+
+    getCSRFToken() {
+        // Get CSRF token from cookie
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, 10) === 'csrftoken=') {
+                    cookieValue = decodeURIComponent(cookie.substring(10));
+                    break;
+                }
+            }
+        }
+        
+        // Fallback: try to get from meta tag
+        if (!cookieValue) {
+            const metaTag = document.querySelector('[name=csrfmiddlewaretoken]');
+            if (metaTag) {
+                cookieValue = metaTag.getAttribute('content');
+            }
+        }
+        
+        // Final fallback: try to get from form input
+        if (!cookieValue) {
+            const inputTag = document.querySelector('input[name=csrfmiddlewaretoken]');
+            if (inputTag) {
+                cookieValue = inputTag.value;
+            }
+        }
+        
+        return cookieValue;
+    }
 }
 
 // Initialize the application when the page loads
@@ -529,10 +619,19 @@ $(document).ready(function() {
     
     // Backup function for direct onclick
     window.testSwaggerClick = function() {
-        console.log('Direct onclick called');
-        alert('Direct onclick works!');
-        if (window.apiManager) {
-            window.apiManager.handleTestSwagger({preventDefault: function(){}});
+        console.log('Direct onclick called for testSwaggerClick');
+        if (window.apiManager && window.apiManager.handleTestSwagger) {
+            // Create a fake event object
+            const fakeEvent = {
+                preventDefault: function() {
+                    console.log('preventDefault called');
+                },
+                target: document.getElementById('testSwaggerBtn')
+            };
+            window.apiManager.handleTestSwagger(fakeEvent);
+        } else {
+            console.error('APIManager or handleTestSwagger not available');
+            alert('API Manager not ready. Please try again.');
         }
     };
 });

@@ -89,7 +89,8 @@ This Django application implements the REST API MCP Tools Generator as described
    ```
 
 ## Running the Application
-
+harshraj28@gmail.com
+Manarsh@123
 ### Development Server
 
 1. **Start Django development server**:

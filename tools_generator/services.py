@@ -6,7 +6,13 @@ import yaml
 import json
 from typing import Dict, List, Any, Optional
 from urllib.parse import urljoin
-from swagger_spec_validator.validator20 import validate_spec
+try:
+    from swagger_spec_validator.validator20 import validate_spec
+    from swagger_spec_validator.common import SwaggerValidationError
+    SWAGGER_VALIDATOR_AVAILABLE = True
+except ImportError:
+    SWAGGER_VALIDATOR_AVAILABLE = False
+
 from jsonschema import ValidationError
 import logging
 
@@ -28,26 +34,66 @@ class SwaggerParser:
         Fetch and validate Swagger specification from URL
         """
         try:
-            response = requests.get(self.swagger_url)
+            response = requests.get(self.swagger_url, timeout=30)
             response.raise_for_status()
             
             # Try to parse as JSON first, then YAML
             try:
                 spec = response.json()
             except json.JSONDecodeError:
-                spec = yaml.safe_load(response.text)
+                try:
+                    spec = yaml.safe_load(response.text)
+                except yaml.YAMLError as ye:
+                    raise Exception(f"Invalid YAML/JSON format: {str(ye)}")
             
-            # Validate the spec
-            validate_spec(spec)
+            # Basic validation - check if it's a valid Swagger/OpenAPI spec
+            self._basic_spec_validation(spec)
+            
+            # Try strict validation but don't fail if it doesn't pass
+            try:
+                if SWAGGER_VALIDATOR_AVAILABLE:
+                    validate_spec(spec)
+                    logger.info("Swagger spec passed strict validation")
+                else:
+                    logger.warning("Swagger validator not available, skipping strict validation")
+            except (ValidationError, Exception) as ve:
+                logger.warning(f"Swagger spec failed strict validation but proceeding: {str(ve)}")
+                # Don't raise the error, just log it and continue
+            
             self.spec = spec
             return spec
             
         except requests.RequestException as e:
             raise Exception(f"Failed to fetch Swagger spec: {str(e)}")
-        except ValidationError as e:
-            raise Exception(f"Invalid Swagger spec: {str(e)}")
         except Exception as e:
             raise Exception(f"Error parsing Swagger spec: {str(e)}")
+    
+    def _basic_spec_validation(self, spec: Dict[str, Any]) -> None:
+        """
+        Perform basic validation to ensure it's a valid Swagger/OpenAPI spec
+        """
+        if not isinstance(spec, dict):
+            raise Exception("Specification must be a JSON object")
+        
+        # Check for required fields
+        swagger_version = spec.get('swagger')
+        openapi_version = spec.get('openapi')
+        
+        if not swagger_version and not openapi_version:
+            raise Exception("Missing 'swagger' or 'openapi' version field")
+        
+        if not spec.get('info'):
+            raise Exception("Missing 'info' section")
+        
+        if not spec.get('paths'):
+            logger.warning("No 'paths' section found in specification")
+        
+        # Validate version format
+        if swagger_version and not swagger_version.startswith('2.'):
+            logger.warning(f"Unsupported Swagger version: {swagger_version}. Expected 2.x")
+        
+        if openapi_version and not (openapi_version.startswith('3.') or openapi_version.startswith('2.')):
+            logger.warning(f"Unsupported OpenAPI version: {openapi_version}. Expected 3.x or 2.x")
     
     def extract_endpoints(self) -> List[Dict[str, Any]]:
         """
@@ -140,16 +186,34 @@ class SwaggerParser:
     
     def _get_parameter_type(self, param: Dict[str, Any]) -> str:
         """
-        Determine the parameter type from schema
+        Determine the parameter type from schema (handles both Swagger 2.0 and OpenAPI 3.0)
         """
+        # For OpenAPI 3.0, type is in schema
         schema = param.get('schema', {})
-        param_type = schema.get('type', 'string')
+        param_type = schema.get('type')
         
+        # For Swagger 2.0, type is directly in parameter
+        if not param_type:
+            param_type = param.get('type', 'string')
+        
+        # Handle array types
         if param_type == 'array':
-            items_type = schema.get('items', {}).get('type', 'string')
+            # OpenAPI 3.0 format
+            items_schema = schema.get('items', {})
+            items_type = items_schema.get('type', 'string')
+            
+            # Swagger 2.0 format
+            if not items_type:
+                items_obj = param.get('items', {})
+                items_type = items_obj.get('type', 'string')
+            
             return f"array[{items_type}]"
         
-        return param_type
+        # Handle file uploads
+        if param_type == 'file':
+            return 'file'
+        
+        return param_type or 'string'
 
 
 class YAMLGenerator:

@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Server Test</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test-section { margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 5px; }
+        button { margin: 5px; padding: 10px 15px; }
+        .result { margin-top: 10px; padding: 10px; background: #f0f0f0; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <h1>MCP Server Test Page</h1>
+    
+    <div class="test-section">
+        <h3>Test Download MCP Package</h3>
+        <button onclick="testDownload()">Download MCP Package</button>
+        <div class="result" id="download-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>Test Create MCP Server</h3>
+        <button onclick="testCreateServer()">Create MCP Server</button>
+        <div class="result" id="create-result"></div>
+    </div>
+
+    <script>
+        function getCSRFToken() {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, 10) === 'csrftoken=') {
+                        cookieValue = decodeURIComponent(cookie.substring(10));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        async function testDownload() {
+            const resultDiv = document.getElementById('download-result');
+            resultDiv.innerHTML = 'Testing download...';
+            
+            try {
+                const response = await fetch('/api/mcp-server/registry/download_mcp_package/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCSRFToken()
+                    },
+                    body: JSON.stringify({
+                        yaml_file_id: 7,
+                        server_name: 'test_download_server'
+                    })
+                });
+
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'test_download_server_mcp_package.zip';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(url);
+                    
+                    resultDiv.innerHTML = 'Download successful!';
+                } else {
+                    const errorData = await response.text();
+                    resultDiv.innerHTML = 'Download failed: ' + errorData;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = 'Download error: ' + error.message;
+            }
+        }
+
+        async function testCreateServer() {
+            const resultDiv = document.getElementById('create-result');
+            resultDiv.innerHTML = 'Testing server creation...';
+            
+            try {
+                const response = await fetch('/api/mcp-server/registry/create_server_from_yaml/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCSRFToken()
+                    },
+                    body: JSON.stringify({
+                        yaml_file_id: 7,
+                        server_name: 'test_create_server'
+                    })
+                });
+
+                const data = await response.json();
+                resultDiv.innerHTML = 'Create server response: ' + JSON.stringify(data, null, 2);
+            } catch (error) {
+                resultDiv.innerHTML = 'Create server error: ' + error.message;
+            }
+        }
+    </script>
+</body>
+</html>
