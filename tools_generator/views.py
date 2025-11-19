@@ -148,6 +148,62 @@ class GeneratedYAMLFileViewSet(viewsets.ModelViewSet):
             filename=yaml_file.file_name
         )
     
+    @action(detail=True, methods=['post'])
+    def generate_installer(self, request, pk=None):
+        """
+        Generate and download auto-installer package from YAML file
+        
+        Creates a ZIP containing:
+        - MCP server files (YAML + Python)
+        - install.bat (Windows auto-installer)
+        - install.sh (macOS/Linux auto-installer)
+        - update_claude_config.py (cross-platform config updater)
+        - requirements.txt
+        - README.md with instructions
+        """
+        from mcp_server.installer_utils import create_installer_package
+        from django.http import HttpResponse
+        
+        yaml_file = self.get_object()
+        
+        try:
+            # Parse YAML to get server name
+            with open(yaml_file.file_path, 'r', encoding='utf-8') as f:
+                yaml_data = yaml.safe_load(f.read())
+            
+            server_name = yaml_data.get('name', f'mcp_server_{pk}')
+            
+            # Create installer package - pass file path, not content
+            zip_path = create_installer_package(yaml_file.file_path, server_name)
+            
+            # Return the ZIP file
+            with open(zip_path, 'rb') as f:
+                response = HttpResponse(f.read(), content_type='application/zip')
+                response['Content-Disposition'] = f'attachment; filename="{server_name}_installer.zip"'
+                
+            # Clean up temp file
+            import threading
+            def cleanup():
+                import time
+                time.sleep(5)  # Give time for download to complete
+                try:
+                    if os.path.exists(zip_path):
+                        os.remove(zip_path)
+                except:
+                    pass
+            
+            threading.Thread(target=cleanup, daemon=True).start()
+            
+            return response
+            
+        except Exception as e:
+            logger.error(f"Error generating installer: {e}")
+            return Response({
+                'status': 'error',
+                'message': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    
     @action(detail=True, methods=['get'])
     def preview(self, request, pk=None):
         """

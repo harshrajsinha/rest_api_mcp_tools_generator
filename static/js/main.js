@@ -1,5 +1,223 @@
 // Main JavaScript file for REST API MCP Tools Generator
 
+class UIManager {
+    static showToast(message, type = 'info') {
+        const icon = type === 'success' ? 'fa-check-circle' :
+            type === 'error' ? 'fa-exclamation-circle' :
+                type === 'warning' ? 'fa-exclamation-triangle' : 'fa-info-circle';
+
+        const bgClass = type === 'success' ? 'text-success' :
+            type === 'error' ? 'text-danger' :
+                type === 'warning' ? 'text-warning' : 'text-primary';
+
+        const toastHtml = `
+            <div class="toast fade show" role="alert" aria-live="assertive" aria-atomic="true">
+                <div class="toast-header">
+                    <i class="fas ${icon} ${bgClass} me-2"></i>
+                    <strong class="me-auto text-capitalize">${type}</strong>
+                    <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+                <div class="toast-body">
+                    ${message}
+                </div>
+            </div>
+        `;
+
+        const toastEl = $(toastHtml);
+        $('.toast-container').append(toastEl);
+
+        // Auto remove
+        setTimeout(() => {
+            toastEl.removeClass('show');
+            setTimeout(() => toastEl.remove(), 300);
+        }, 5000);
+    }
+
+    static showSpinner(element, text = 'Loading...') {
+        const originalContent = element.html();
+        element.data('original-content', originalContent);
+        element.html(`<span class="spinner-border spinner-border-sm me-2"></span>${text}`);
+        element.prop('disabled', true);
+    }
+
+    static hideSpinner(element) {
+        const originalContent = element.data('original-content');
+        if (originalContent) {
+            element.html(originalContent);
+        }
+        element.prop('disabled', false);
+    }
+}
+
+class WizardManager {
+    constructor(apiManager) {
+        this.apiManager = apiManager;
+        this.currentStep = 1;
+        this.formData = {};
+        this.init();
+    }
+
+    init() {
+        // Step 1: Test Connection
+        $('#step1-form').on('submit', async (e) => {
+            e.preventDefault();
+            await this.handleStep1();
+        });
+
+        // Step 2: Configure
+        $('#step2-form').on('submit', (e) => {
+            e.preventDefault();
+            this.handleStep2();
+        });
+
+        // Step 3: Create
+        $('#createApiBtn').on('click', () => this.handleStep3());
+
+        // Navigation
+        $('.prev-step').on('click', () => this.goToStep(this.currentStep - 1));
+
+        // Auth Type Change
+        $('#authType').on('change', (e) => this.handleAuthTypeChange(e.target.value));
+    }
+
+    async handleStep1() {
+        const btn = $('#testConnectionBtn');
+        const swaggerUrl = $('#swaggerUrl').val();
+
+        if (!swaggerUrl) {
+            UIManager.showToast('Please enter a Swagger URL', 'warning');
+            return;
+        }
+
+        UIManager.showSpinner(btn, 'Testing Connection...');
+
+        try {
+            const response = await this.apiManager.apiCall('POST', '/tools-generator/swagger-test/test_swagger_url/', {
+                swagger_url: swaggerUrl
+            });
+
+            if (response.status === 'success') {
+                this.formData.swaggerUrl = swaggerUrl;
+                this.formData.swaggerInfo = response.swagger_info;
+
+                // Auto-fill Step 2
+                $('#apiName').val(response.swagger_info.title || '');
+                $('#apiBaseUrl').val(response.swagger_info.host ? `https://${response.swagger_info.host}${response.swagger_info.base_path}` : '');
+                $('#apiDescription').val(response.swagger_info.description || '');
+
+                UIManager.showToast('Connection successful!', 'success');
+                this.goToStep(2);
+            }
+        } catch (error) {
+            UIManager.showToast(error.message, 'error');
+        } finally {
+            UIManager.hideSpinner(btn);
+        }
+    }
+
+    handleStep2() {
+        this.formData.name = $('#apiName').val();
+        this.formData.baseUrl = $('#apiBaseUrl').val();
+        this.formData.description = $('#apiDescription').val();
+        this.formData.authType = $('#authType').val();
+
+        // Collect Auth Config
+        this.formData.authConfig = {};
+        $('#authConfigFields input').each((_, el) => {
+            this.formData.authConfig[el.name] = $(el).val();
+        });
+
+        this.updateReviewStep();
+        this.goToStep(3);
+    }
+
+    async handleStep3() {
+        const btn = $('#createApiBtn');
+        UIManager.showSpinner(btn, 'Creating...');
+
+        try {
+            const payload = {
+                name: this.formData.name,
+                swagger_url: this.formData.swaggerUrl,
+                api_base_url: this.formData.baseUrl,
+                description: this.formData.description,
+                auth_type: this.formData.authType,
+                auth_config: this.formData.authConfig
+            };
+
+            await this.apiManager.apiCall('POST', '/tools-generator/api-configs/', payload);
+
+            UIManager.showToast('API Configuration created successfully!', 'success');
+            $('#createApiModal').modal('hide');
+            this.resetWizard();
+            this.apiManager.loadAPIConfigs();
+        } catch (error) {
+            UIManager.showToast(error.message, 'error');
+        } finally {
+            UIManager.hideSpinner(btn);
+        }
+    }
+
+    goToStep(step) {
+        this.currentStep = step;
+
+        // Update UI
+        $('.step-content').addClass('d-none');
+        $(`#step${step}`).removeClass('d-none');
+
+        // Update Wizard Header
+        $('.wizard-step').removeClass('active completed');
+        for (let i = 1; i < step; i++) {
+            $(`.wizard-step[data-step="${i}"]`).addClass('completed');
+        }
+        $(`.wizard-step[data-step="${step}"]`).addClass('active');
+    }
+
+    updateReviewStep() {
+        $('#reviewName').text(this.formData.name);
+        $('#reviewSwagger').text(this.formData.swaggerUrl);
+        $('#reviewBaseUrl').text(this.formData.baseUrl);
+        $('#reviewAuth').html(`<span class="badge bg-secondary">${this.formData.authType}</span>`);
+        $('#reviewEndpointsCount').text(`${this.formData.swaggerInfo?.endpoints_count || 0} endpoints found`);
+    }
+
+    handleAuthTypeChange(type) {
+        const container = $('#authConfigFields');
+        container.empty();
+
+        if (type === 'api_key') {
+            container.html(`
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label small">Header Name</label>
+                        <input type="text" class="form-control" name="header_name" placeholder="X-API-Key" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small">API Key</label>
+                        <input type="password" class="form-control" name="api_key" required>
+                    </div>
+                </div>
+            `);
+        } else if (type === 'bearer_token') {
+            container.html(`
+                <div class="mb-2">
+                    <label class="form-label small">Token</label>
+                    <input type="password" class="form-control" name="token" required>
+                </div>
+            `);
+        }
+        // Add other auth types as needed
+    }
+
+    resetWizard() {
+        this.currentStep = 1;
+        this.formData = {};
+        $('#step1-form')[0].reset();
+        $('#step2-form')[0].reset();
+        this.goToStep(1);
+    }
+}
+
 class APIManager {
     constructor() {
         this.baseURL = '/api';
@@ -7,309 +225,255 @@ class APIManager {
     }
 
     init() {
-        this.setupEventListeners();
-        // Wait for DOM to be fully ready before loading data
-        $(document).ready(() => {
-            this.loadInitialData();
-        });
+        this.wizard = new WizardManager(this);
+        this.loadInitialData();
+        this.setupGlobalListeners();
     }
 
-    setupEventListeners() {
-        // Wait for DOM to be ready
-        $(document).ready(() => {
-            // API Configuration Form
-            $('#api-config-form').off('submit').on('submit', this.handleAPIConfigSubmit.bind(this));
-            
-            // Test Connection Button with multiple binding strategies
-            $('#testSwaggerBtn').off('click').on('click', this.handleTestSwagger.bind(this));
-            $(document).off('click', '#testSwaggerBtn').on('click', '#testSwaggerBtn', this.handleTestSwagger.bind(this));
-            
-            console.log('Test button found:', $('#testSwaggerBtn').length);
-            console.log('Event listeners set up successfully');
-        });
-            
-        // YAML generation - use event delegation for dynamically created buttons
+    setupGlobalListeners() {
+        // Refresh buttons
+        $(document).on('click', '.refresh-btn', () => this.loadInitialData());
+
+        // Generate YAML
         $(document).on('click', '.generate-yaml-btn', this.handleGenerateYAML.bind(this));
-        
-        // MCP Server management
-        $(document).on('click', '.start-server-btn', this.handleStartServer.bind(this));
-        $(document).on('click', '.stop-server-btn', this.handleStopServer.bind(this));
+
+        // Tool Actions
+        $(document).on('click', '.download-yaml-btn', this.handleDownloadMCPPackage.bind(this));
+
+        // Installer Download
+        $(document).on('click', '.download-installer-btn', this.handleDownloadInstaller.bind(this));
+
+        // Delete Actions
+        $(document).on('click', '.delete-config-btn', this.handleDeleteConfig.bind(this));
+        $(document).on('click', '.delete-yaml-btn', this.handleDeleteYAML.bind(this));
     }
 
     async loadInitialData() {
-        console.log('Loading initial data...');
+        await Promise.all([
+            this.loadAPIConfigs(),
+            this.loadYAMLFiles()
+        ]);
+    }
+
+    async apiCall(method, endpoint, data = null) {
         try {
-            await this.loadAPIConfigs();
-            await this.loadYAMLFiles();
-            await this.loadMCPServers();
-            console.log('Initial data loading completed');
+            const config = {
+                method,
+                url: this.baseURL + endpoint,
+                headers: { 'Content-Type': 'application/json' },
+                data
+            };
+            const response = await axios(config);
+            return response.data;
         } catch (error) {
-            console.error('Error loading initial data:', error);
+            throw new Error(error.response?.data?.message || 'Network error');
         }
     }
 
-    // API Configuration Methods
-    async handleAPIConfigSubmit(e) {
-        e.preventDefault();
-        
-        const formData = {
-            name: $('#apiName').val(),
-            swagger_url: $('#swaggerUrl').val(),
-            api_base_url: $('#apiBaseUrl').val(),
-            description: $('#apiDescription').val(),
-            auth_type: $('#authType').val(),
-            auth_config: {}
-        };
-
-        try {
-            const response = await this.apiCall('POST', '/tools-generator/api-configs/', formData);
-            this.showMessage('API Configuration saved successfully!', 'success');
-            $('#api-config-form')[0].reset();
-            await this.loadAPIConfigs();
-        } catch (error) {
-            this.showMessage('Error saving API configuration: ' + error.message, 'error');
-        }
-    }
-
-    async handleTestSwagger(e) {
-        console.log('handleTestSwagger called');
-        e.preventDefault();
-        
-        const swaggerUrl = $('#swaggerUrl').val();
-        const apiBaseUrl = $('#apiBaseUrl').val();
-        
-        console.log('Swagger URL:', swaggerUrl);
-        console.log('API Base URL:', apiBaseUrl);
-        
-        if (!swaggerUrl) {
-            this.showMessage('Please enter a Swagger URL', 'warning');
-            return;
-        }
-
-        const testBtn = $('#testSwaggerBtn');
-        const originalText = testBtn.html();
-        testBtn.html('<span class="loading-spinner"></span> Testing...');
-        testBtn.prop('disabled', true);
-
-        try {
-            const response = await this.apiCall('POST', '/tools-generator/swagger-test/test_swagger_url/', {
-                swagger_url: swaggerUrl,
-                api_base_url: apiBaseUrl
-            });
-
-            console.log('API Response:', response);
-
-            if (response.status === 'success') {
-                const message = `Successfully connected! Found ${response.swagger_info.endpoints_count} endpoints.`;
-                console.log('Success message:', message);
-                this.showMessage(message, 'success');
-                
-                // Auto-fill API name if empty
-                if (!$('#apiName').val() && response.swagger_info.title) {
-                    $('#apiName').val(response.swagger_info.title);
-                }
-            } else {
-                const errorMessage = 'Connection failed: ' + response.message;
-                console.log('Error message:', errorMessage);
-                this.showMessage(errorMessage, 'error');
-            }
-        } catch (error) {
-            const catchMessage = 'Error testing connection: ' + error.message;
-            console.log('Catch message:', catchMessage);
-            this.showMessage(catchMessage, 'error');
-        } finally {
-            testBtn.html(originalText);
-            testBtn.prop('disabled', false);
-        }
-    }
-
+    // --- API Configs ---
     async loadAPIConfigs() {
-        console.log('Loading API configs...');
         try {
-            const configs = await this.apiCall('GET', '/tools-generator/api-configs/');
-            console.log('API configs loaded:', configs);
-            this.renderAPIConfigs(configs.results || configs);
+            const response = await this.apiCall('GET', '/tools-generator/api-configs/');
+            this.renderAPIConfigs(response.results || response);
         } catch (error) {
-            console.error('Error loading API configs:', error);
+            console.error('Error loading configs:', error);
+            $('#api-configs-list').html(this.getErrorState('Failed to load API configurations'));
         }
     }
 
     renderAPIConfigs(configs) {
-        console.log('Rendering API configs:', configs);
         const container = $('#api-configs-list');
-        console.log('Container found:', container.length);
-        
-        if (!configs || configs.length === 0) {
-            container.html('<p class="text-muted">No API configurations found.</p>');
+        if (!configs.length) {
+            container.html(this.getEmptyState('No API configurations yet. Create one to get started!'));
             return;
         }
 
-        const html = configs.map(config => `
-            <div class="api-config-item" data-id="${config.id}">
-                <div class="d-flex justify-content-between align-items-start">
-                    <div>
-                        <h6 class="mb-1">${config.name}</h6>
-                        <p class="mb-1 text-muted small">${config.api_base_url}</p>
-                        <p class="mb-0 small">${config.description || 'No description'}</p>
+        container.html(configs.map(config => `
+            <div class="col-md-6 col-lg-4 mb-4">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-3">
+                            <h5 class="card-title mb-0 text-truncate" title="${config.name}">${config.name}</h5>
+                            <span class="badge bg-secondary">${config.auth_type}</span>
+                        </div>
+                        <p class="card-text text-muted small mb-3 text-truncate">${config.api_base_url}</p>
+                        <div class="d-grid gap-2">
+                            <button class="btn btn-outline-primary btn-sm generate-yaml-btn" data-id="${config.id}">
+                                <i class="fas fa-file-code me-2"></i> Generate Tools
+                            </button>
+                            <button class="btn btn-outline-danger btn-sm delete-config-btn" data-id="${config.id}" data-name="${config.name}">
+                                <i class="fas fa-trash me-2"></i> Delete Configuration
+                            </button>
+                        </div>
                     </div>
-                    <div class="btn-group btn-group-sm">
-                        <button class="btn btn-outline-primary generate-yaml-btn" data-id="${config.id}">
-                            <i class="fas fa-file-code"></i> Generate YAML
-                        </button>
-                        <button class="btn btn-outline-secondary test-config-btn" data-id="${config.id}">
-                            <i class="fas fa-link"></i> Test
-                        </button>
+                    <div class="card-footer bg-transparent border-top-0 text-muted small">
+                        Created ${new Date(config.created_at).toLocaleDateString()}
                     </div>
-                </div>
-                <div class="mt-2">
-                    <span class="badge bg-secondary">${config.auth_type}</span>
-                    <span class="badge bg-info">${new Date(config.created_at).toLocaleDateString()}</span>
                 </div>
             </div>
-        `).join('');
-
-        container.html(html);
+        `).join(''));
     }
 
-    // YAML Generation Methods
-    async handleGenerateYAML(e) {
-        console.log('handleGenerateYAML called');
-        e.preventDefault();
-        
-        const configId = $(e.target).closest('.generate-yaml-btn').data('id');
-        console.log('Config ID:', configId);
-        
-        if (!configId) {
-            console.error('No config ID found');
-            this.showMessage('Error: No configuration ID found', 'error');
-            return;
-        }
-        
-        const btn = $(e.target).closest('.generate-yaml-btn');
-        const originalText = btn.html();
-        
-        btn.html('<span class="loading-spinner"></span> Generating...');
-        btn.prop('disabled', true);
-
-        try {
-            const response = await this.apiCall('POST', `/tools-generator/api-configs/${configId}/generate_yaml/`);
-            
-            console.log('Generate YAML response:', response);
-            
-            if (response.status === 'success') {
-                this.showMessage('YAML generation started successfully!', 'success');
-                // Poll for completion
-                setTimeout(() => this.loadYAMLFiles(), 2000);
-            } else {
-                this.showMessage('Error generating YAML: ' + response.message, 'error');
-            }
-        } catch (error) {
-            console.error('Generate YAML error:', error);
-            this.showMessage('Error generating YAML: ' + error.message, 'error');
-        } finally {
-            btn.html(originalText);
-            btn.prop('disabled', false);
-        }
-    }
-
+    // --- YAML Files ---
     async loadYAMLFiles() {
         try {
-            const files = await this.apiCall('GET', '/tools-generator/yaml-files/');
-            this.renderYAMLFiles(files.results || files);
+            const response = await this.apiCall('GET', '/tools-generator/yaml-files/');
+            this.renderYAMLFiles(response.results || response);
         } catch (error) {
-            console.error('Error loading YAML files:', error);
+            console.error('Error loading YAMLs:', error);
         }
     }
 
     renderYAMLFiles(files) {
         const container = $('#yaml-files-list');
-        
-        if (!files || files.length === 0) {
-            container.html('<p class="text-muted">No YAML files generated yet.</p>');
+        if (!files.length) {
+            container.html(this.getEmptyState('No tool definitions generated yet.'));
             return;
         }
 
-        const html = files.map(file => `
-            <div class="yaml-file-item" data-id="${file.id}">
-                <div class="d-flex justify-content-between align-items-start">
-                    <div>
-                        <h6 class="mb-1">${file.file_name}</h6>
-                        <p class="mb-1 text-muted small">${file.api_config_name}</p>
-                        <p class="mb-0 small">${file.tools_count} tools</p>
+        container.html(files.map(file => `
+            <div class="col-md-6 col-lg-4 mb-4">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-3">
+                            <h5 class="card-title mb-0 text-truncate">${file.file_name}</h5>
+                            <span class="badge bg-info">${file.tools_count} tools</span>
+                        </div>
+                        <p class="text-muted small mb-3">From: ${file.api_config_name}</p>
+                        <div class="d-grid gap-2">
+                            <button class="btn btn-primary btn-sm download-installer-btn" data-yaml-id="${file.id}">
+                                <i class="fas fa-rocket me-2"></i> Download Auto-Installer
+                            </button>
+                            <a href="/enhance-endpoints/?yaml_file=${file.id}" class="btn btn-outline-primary btn-sm">
+                                <i class="fas fa-magic me-1"></i> Enhance Descriptions
+                            </a>
+                            <div class="btn-group">
+                                <button class="btn btn-outline-secondary btn-sm download-yaml-btn" data-id="${file.id}">
+                                    <i class="fas fa-download me-1"></i> Package
+                                </button>
+                                <button class="btn btn-outline-danger btn-sm delete-yaml-btn" data-id="${file.id}" data-name="${file.file_name}">
+                                    <i class="fas fa-trash me-1"></i> Delete
+                                </button>
+                            </div>
+                        </div>
                     </div>
-                    <div class="btn-group btn-group-sm">
-                        <button class="btn btn-outline-warning enhance-endpoints-btn" data-id="${file.id}" title="Enhance endpoint descriptions">
-                            <i class="fas fa-edit"></i> Enhance
-                        </button>
-                        <button class="btn btn-outline-success create-server-btn" data-id="${file.id}">
-                            <i class="fas fa-server"></i> Create Server
-                        </button>
-                        <button class="btn btn-outline-primary download-yaml-btn" data-id="${file.id}" title="Download MCP Server Package">
-                            <i class="fas fa-download"></i> MCP
-                        </button>
-                    </div>
-                </div>
-                <div class="mt-2">
-                    <span class="badge bg-${this.getStatusColor(file.generation_status)}">${file.generation_status}</span>
-                    <span class="badge bg-info">${new Date(file.created_at).toLocaleDateString()}</span>
                 </div>
             </div>
-        `).join('');
-
-        container.html(html);
-
-        // Add event listeners for new buttons
-        $('.enhance-endpoints-btn').on('click', this.handleEnhanceEndpoints.bind(this));
-        $('.create-server-btn').on('click', this.handleCreateServer.bind(this));
-        $('.download-yaml-btn').on('click', this.handleDownloadMCPPackage.bind(this));
+        `).join(''));
     }
 
-    getStatusColor(status) {
-        const colors = {
-            'pending': 'warning',
-            'processing': 'info',
-            'completed': 'success',
-            'failed': 'danger'
-        };
-        return colors[status] || 'secondary';
+    // --- MCP Servers ---
+    async loadMCPServers() {
+        try {
+            const response = await this.apiCall('GET', '/mcp-server/instances/');
+            this.renderMCPServers(response.results || response);
+        } catch (error) {
+            console.error('Error loading servers:', error);
+        }
     }
 
-    // MCP Server Methods
-    async handleCreateServer(e) {
-        const yamlFileId = $(e.target).closest('.create-server-btn').data('id');
-        const serverName = prompt('Enter server name:');
-        
-        if (!serverName) return;
+    renderMCPServers(servers) {
+        const container = $('#mcp-servers-list');
+        if (!servers.length) {
+            container.html(this.getEmptyState('No servers running.'));
+            return;
+        }
+
+        container.html(servers.map(server => `
+            <div class="col-md-6 col-lg-4 mb-4">
+                <div class="card h-100 border-${server.is_running ? 'success' : 'secondary'}">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="card-title mb-0">${server.server_name}</h5>
+                            <span class="status-indicator status-${server.is_running ? 'running' : 'stopped'}"></span>
+                        </div>
+                        <p class="text-muted small mb-3">Config: ${server.yaml_file_name}</p>
+                        <div class="d-grid gap-2">
+                            <button class="btn btn-primary btn-sm download-installer-btn" data-id="${server.id}">
+                                <i class="fas fa-rocket me-2"></i> Download Auto-Installer
+                            </button>
+                            ${server.is_running ?
+                `<button class="btn btn-danger btn-sm stop-server-btn" data-id="${server.id}">
+                                    <i class="fas fa-stop me-2"></i> Stop Server
+                                </button>` :
+                `<button class="btn btn-success btn-sm start-server-btn" data-id="${server.id}">
+                                    <i class="fas fa-play me-2"></i> Start Server
+                                </button>`
+            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `).join(''));
+    }
+
+    // --- Actions ---
+    async handleGenerateYAML(e) {
+        const btn = $(e.currentTarget);
+        const id = btn.data('id');
+
+        UIManager.showSpinner(btn, 'Generating...');
 
         try {
-            const response = await this.apiCall('POST', '/mcp-server/registry/create_server_from_yaml/', {
-                yaml_file_id: yamlFileId,
-                server_name: serverName
-            });
-
-            if (response.status === 'success') {
-                this.showMessage(`MCP Server "${serverName}" created successfully!`, 'success');
-                await this.loadMCPServers();
-            } else {
-                this.showMessage('Error creating server: ' + response.message, 'error');
-            }
+            await this.apiCall('POST', `/tools-generator/api-configs/${id}/generate_yaml/`);
+            UIManager.showToast('Generation started', 'success');
+            setTimeout(() => this.loadYAMLFiles(), 2000);
         } catch (error) {
-            this.showMessage('Error creating server: ' + error.message, 'error');
+            UIManager.showToast(error.message, 'error');
+        } finally {
+            UIManager.hideSpinner(btn);
+        }
+    }
+
+    async handleCreateServer(e) {
+        const id = $(e.currentTarget).data('id');
+        const name = prompt('Enter a name for this server instance:');
+        if (!name) return;
+
+        try {
+            await this.apiCall('POST', '/mcp-server/registry/create_server_from_yaml/', {
+                yaml_file_id: id,
+                server_name: name
+            });
+            UIManager.showToast('Server created', 'success');
+            this.loadMCPServers();
+        } catch (error) {
+            UIManager.showToast(error.message, 'error');
+        }
+    }
+
+    async handleStartServer(e) {
+        const id = $(e.currentTarget).data('id');
+        try {
+            await this.apiCall('POST', `/mcp-server/instances/${id}/start_server/`);
+            UIManager.showToast('Server started', 'success');
+            this.loadMCPServers();
+        } catch (error) {
+            UIManager.showToast(error.message, 'error');
+        }
+    }
+
+    async handleStopServer(e) {
+        const id = $(e.currentTarget).data('id');
+        try {
+            await this.apiCall('POST', `/mcp-server/instances/${id}/stop_server/`);
+            UIManager.showToast('Server stopped', 'success');
+            this.loadMCPServers();
+        } catch (error) {
+            UIManager.showToast(error.message, 'error');
         }
     }
 
     async handleDownloadMCPPackage(e) {
-        const yamlFileId = $(e.target).closest('.download-yaml-btn').data('id');
+        const yamlFileId = $(e.currentTarget).data('id');
         const serverName = prompt('Enter server name for the MCP package:', `mcp_server_${yamlFileId}`);
-        
+
         if (!serverName) return;
 
-        const btn = $(e.target).closest('.download-yaml-btn');
-        const originalHtml = btn.html();
-        btn.html('<i class="fas fa-spinner fa-spin"></i>').prop('disabled', true);
+        const btn = $(e.currentTarget);
+        UIManager.showSpinner(btn, '');
 
         try {
-            // Make request to download endpoint
             const response = await fetch('/api/mcp-server/registry/download_mcp_package/', {
                 method: 'POST',
                 headers: {
@@ -323,264 +487,155 @@ class APIManager {
             });
 
             if (response.ok) {
-                // Handle file download
                 const blob = await response.blob();
                 const url = window.URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.style.display = 'none';
                 a.href = url;
-                
-                // Extract filename from response headers or use default
+
                 const contentDisposition = response.headers.get('Content-Disposition');
                 let filename = `${serverName}_mcp_package.zip`;
                 if (contentDisposition) {
                     const matches = /filename="([^"]*)"/.exec(contentDisposition);
-                    if (matches) {
-                        filename = matches[1];
-                    }
+                    if (matches) filename = matches[1];
                 }
                 a.download = filename;
-                
+
                 document.body.appendChild(a);
                 a.click();
                 window.URL.revokeObjectURL(url);
                 document.body.removeChild(a);
-                
-                this.showMessage('MCP server package downloaded successfully!', 'success');
+
+                UIManager.showToast('Package downloaded successfully!', 'success');
             } else {
                 const errorData = await response.json();
-                this.showMessage('Error downloading package: ' + (errorData.message || 'Unknown error'), 'error');
+                throw new Error(errorData.message || 'Download failed');
             }
         } catch (error) {
-            this.showMessage('Error downloading package: ' + error.message, 'error');
+            UIManager.showToast(error.message, 'error');
         } finally {
-            btn.html(originalHtml).prop('disabled', false);
+            UIManager.hideSpinner(btn);
         }
     }
 
-    handleEnhanceEndpoints(e) {
-        const yamlFileId = $(e.target).closest('.enhance-endpoints-btn').data('id');
-        
-        // Redirect to the enhancement page with the YAML file ID
-        window.location.href = `/enhance-endpoints/?yaml_file=${yamlFileId}`;
-    }
+    async handleDownloadInstaller(e) {
+        const yamlId = $(e.currentTarget).data('yaml-id');
+        const btn = $(e.currentTarget);
 
-    async loadMCPServers() {
-        try {
-            const servers = await this.apiCall('GET', '/mcp-server/instances/');
-            this.renderMCPServers(servers.results || servers);
-        } catch (error) {
-            console.error('Error loading MCP servers:', error);
-        }
-    }
-
-    renderMCPServers(servers) {
-        const container = $('#mcp-servers-list');
-        
-        if (!servers || servers.length === 0) {
-            container.html('<p class="text-muted">No MCP servers created yet.</p>');
+        if (!yamlId) {
+            UIManager.showToast('YAML file ID not found', 'error');
             return;
         }
 
-        const html = servers.map(server => `
-            <div class="mcp-server-item" data-id="${server.id}">
-                <div class="d-flex justify-content-between align-items-start">
-                    <div>
-                        <h6 class="mb-1">
-                            <span class="status-indicator status-${server.is_running ? 'running' : 'stopped'}"></span>
-                            ${server.server_name}
-                        </h6>
-                        <p class="mb-1 text-muted small">${server.api_config_name}</p>
-                        <p class="mb-0 small">YAML: ${server.yaml_file_name}</p>
-                    </div>
-                    <div class="btn-group btn-group-sm">
-                        ${server.is_running ? 
-                            `<button class="btn btn-outline-danger stop-server-btn" data-id="${server.id}">
-                                <i class="fas fa-stop"></i> Stop
-                            </button>
-                            <button class="btn btn-outline-info view-tools-btn" data-id="${server.id}">
-                                <i class="fas fa-tools"></i> Tools
-                            </button>` :
-                            `<button class="btn btn-outline-success start-server-btn" data-id="${server.id}">
-                                <i class="fas fa-play"></i> Start
-                            </button>`
-                        }
-                    </div>
-                </div>
-                <div class="mt-2">
-                    <span class="badge bg-${server.is_running ? 'success' : 'secondary'}">
-                        ${server.is_running ? 'Running' : 'Stopped'}
-                    </span>
-                    <span class="badge bg-info">${new Date(server.created_at).toLocaleDateString()}</span>
-                </div>
-            </div>
-        `).join('');
-
-        container.html(html);
-
-        // Add event listeners
-        $('.view-tools-btn').on('click', this.handleViewTools.bind(this));
-    }
-
-    async handleStartServer(e) {
-        const serverId = $(e.target).closest('.start-server-btn').data('id');
-        
-        try {
-            const response = await this.apiCall('POST', `/mcp-server/instances/${serverId}/start_server/`);
-            
-            if (response.status === 'success') {
-                this.showMessage('Server started successfully!', 'success');
-                await this.loadMCPServers();
-            } else {
-                this.showMessage('Error starting server: ' + response.message, 'error');
-            }
-        } catch (error) {
-            this.showMessage('Error starting server: ' + error.message, 'error');
-        }
-    }
-
-    async handleStopServer(e) {
-        const serverId = $(e.target).closest('.stop-server-btn').data('id');
-        
-        try {
-            const response = await this.apiCall('POST', `/mcp-server/instances/${serverId}/stop_server/`);
-            
-            if (response.status === 'success') {
-                this.showMessage('Server stopped successfully!', 'success');
-                await this.loadMCPServers();
-            } else {
-                this.showMessage('Error stopping server: ' + response.message, 'error');
-            }
-        } catch (error) {
-            this.showMessage('Error stopping server: ' + error.message, 'error');
-        }
-    }
-
-    async handleViewTools(e) {
-        const serverId = $(e.target).closest('.view-tools-btn').data('id');
-        
-        try {
-            const response = await this.apiCall('GET', `/mcp-server/instances/${serverId}/get_tools/`);
-            
-            if (response.status === 'success') {
-                this.showToolsModal(response.tools);
-            } else {
-                this.showMessage('Error loading tools: ' + response.message, 'error');
-            }
-        } catch (error) {
-            this.showMessage('Error loading tools: ' + error.message, 'error');
-        }
-    }
-
-    showToolsModal(tools) {
-        const html = tools.map(tool => `
-            <div class="tool-item border rounded p-3 mb-2">
-                <div class="d-flex justify-content-between align-items-start">
-                    <div>
-                        <h6 class="mb-1">${tool.name}</h6>
-                        <p class="mb-1 small text-muted">${tool.method} ${tool.path}</p>
-                        <p class="mb-0 small">${tool.description || 'No description'}</p>
-                    </div>
-                    <button class="btn btn-sm btn-outline-primary test-tool-btn" 
-                            data-tool-name="${tool.name}" data-tool='${JSON.stringify(tool)}'>
-                        <i class="fas fa-play"></i> Test
-                    </button>
-                </div>
-            </div>
-        `).join('');
-
-        // Create and show modal
-        const modal = $(`
-            <div class="modal fade" id="toolsModal" tabindex="-1">
-                <div class="modal-dialog modal-lg">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h5 class="modal-title">Available Tools</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                        </div>
-                        <div class="modal-body">
-                            ${html}
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `);
-
-        $('body').append(modal);
-        modal.modal('show');
-
-        // Remove modal when hidden
-        modal.on('hidden.bs.modal', function() {
-            modal.remove();
-        });
-    }
-
-    // Utility Methods
-    async apiCall(method, endpoint, data = null) {
-        const config = {
-            method: method,
-            url: this.baseURL + endpoint,
-            headers: {
-                'Content-Type': 'application/json',
-            }
-        };
-
-        if (data) {
-            config.data = data;
-        }
+        UIManager.showSpinner(btn, 'Generating...');
 
         try {
-            const response = await axios(config);
-            return response.data;
-        } catch (error) {
-            if (error.response) {
-                throw new Error(error.response.data.message || 'Server error');
-            } else {
-                throw new Error('Network error');
-            }
-        }
-    }
-
-    showMessage(message, type) {
-        console.log('showMessage called:', message, type);
-        
-        const alertClass = type === 'success' ? 'alert-success' : 
-                          type === 'error' ? 'alert-danger' : 
-                          type === 'warning' ? 'alert-warning' : 'alert-info';
-
-        console.log('Alert class:', alertClass);
-        
-        const alert = $(`
-            <div class="alert ${alertClass} alert-dismissible fade show" role="alert" style="margin-bottom: 1rem;">
-                <strong>${type === 'success' ? '✅ Success:' : type === 'error' ? '❌ Error:' : type === 'warning' ? '⚠️  Warning:' : 'ℹ️  Info:'}</strong> ${message}
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            </div>
-        `);
-
-        console.log('Status messages container found:', $('#status-messages').length);
-        
-        // Clear previous messages of the same type to avoid clutter
-        $(`#status-messages .alert-${alertClass.split('-')[1]}`).remove();
-        
-        $('#status-messages').prepend(alert);
-        console.log('Alert appended');
-
-        // Scroll to top to ensure message is visible
-        $('html, body').animate({ scrollTop: 0 }, 300);
-
-        // Auto-remove after 8 seconds (longer for better UX)
-        setTimeout(() => {
-            alert.fadeOut(300, function() {
-                $(this).remove();
+            // Call the new generate_installer endpoint on the YAML file
+            const response = await fetch(`/api/tools-generator/yaml-files/${yamlId}/generate_installer/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': this.getCSRFToken()
+                }
             });
-        }, 8000);
+
+            if (response.ok) {
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+
+                const contentDisposition = response.headers.get('Content-Disposition');
+                let filename = 'mcp_installer.zip';
+                if (contentDisposition) {
+                    const matches = /filename="([^"]*)"/.exec(contentDisposition);
+                    if (matches) filename = matches[1];
+                }
+                a.download = filename;
+
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+
+                UIManager.showToast('Auto-installer downloaded! Extract and run install script.', 'success');
+            } else {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Download failed');
+            }
+        } catch (error) {
+            UIManager.showToast(error.message, 'error');
+        } finally {
+            UIManager.hideSpinner(btn);
+        }
+    }
+
+    async handleDeleteConfig(e) {
+        const id = $(e.currentTarget).data('id');
+        const name = $(e.currentTarget).data('name');
+
+        if (!confirm(`Are you sure you want to delete the API configuration "${name}"?\n\nThis action cannot be undone.`)) {
+            return;
+        }
+
+        const btn = $(e.currentTarget);
+        UIManager.showSpinner(btn, 'Deleting...');
+
+        try {
+            await this.apiCall('DELETE', `/tools-generator/api-configs/${id}/`);
+            UIManager.showToast(`Configuration "${name}" deleted successfully`, 'success');
+            this.loadAPIConfigs();
+        } catch (error) {
+            UIManager.showToast(error.message, 'error');
+        } finally {
+            UIManager.hideSpinner(btn);
+        }
+    }
+
+    async handleDeleteYAML(e) {
+        const id = $(e.currentTarget).data('id');
+        const name = $(e.currentTarget).data('name');
+
+        if (!confirm(`Are you sure you want to delete the tool definition "${name}"?\n\nThis action cannot be undone.`)) {
+            return;
+        }
+
+        const btn = $(e.currentTarget);
+        UIManager.showSpinner(btn, 'Deleting...');
+
+        try {
+            await this.apiCall('DELETE', `/tools-generator/yaml-files/${id}/`);
+            UIManager.showToast(`Tool definition "${name}" deleted successfully`, 'success');
+            this.loadYAMLFiles();
+        } catch (error) {
+            UIManager.showToast(error.message, 'error');
+        } finally {
+            UIManager.hideSpinner(btn);
+        }
+    }
+
+    // --- Helpers ---
+    getEmptyState(message) {
+        return `
+            <div class="col-12">
+                <div class="empty-state">
+                    <div class="empty-state-icon"><i class="fas fa-wind"></i></div>
+                    <p>${message}</p>
+                </div>
+            </div>
+        `;
+    }
+
+    getErrorState(message) {
+        return `
+            <div class="col-12 text-center text-danger py-4">
+                <i class="fas fa-exclamation-circle mb-2"></i>
+                <p>${message}</p>
+            </div>
+        `;
     }
 
     getCSRFToken() {
-        // Get CSRF token from cookie
         let cookieValue = null;
         if (document.cookie && document.cookie !== '') {
             const cookies = document.cookie.split(';');
@@ -592,46 +647,11 @@ class APIManager {
                 }
             }
         }
-        
-        // Fallback: try to get from meta tag
-        if (!cookieValue) {
-            const metaTag = document.querySelector('[name=csrfmiddlewaretoken]');
-            if (metaTag) {
-                cookieValue = metaTag.getAttribute('content');
-            }
-        }
-        
-        // Final fallback: try to get from form input
-        if (!cookieValue) {
-            const inputTag = document.querySelector('input[name=csrfmiddlewaretoken]');
-            if (inputTag) {
-                cookieValue = inputTag.value;
-            }
-        }
-        
         return cookieValue;
     }
 }
 
-// Initialize the application when the page loads
-$(document).ready(function() {
+// Initialize
+$(document).ready(() => {
     window.apiManager = new APIManager();
-    
-    // Backup function for direct onclick
-    window.testSwaggerClick = function() {
-        console.log('Direct onclick called for testSwaggerClick');
-        if (window.apiManager && window.apiManager.handleTestSwagger) {
-            // Create a fake event object
-            const fakeEvent = {
-                preventDefault: function() {
-                    console.log('preventDefault called');
-                },
-                target: document.getElementById('testSwaggerBtn')
-            };
-            window.apiManager.handleTestSwagger(fakeEvent);
-        } else {
-            console.error('APIManager or handleTestSwagger not available');
-            alert('API Manager not ready. Please try again.');
-        }
-    };
 });

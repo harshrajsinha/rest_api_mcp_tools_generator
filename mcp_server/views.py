@@ -183,6 +183,73 @@ class MCPServerInstanceViewSet(viewsets.ModelViewSet):
                 'status': 'error',
                 'message': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    @action(detail=True, methods=['post'])
+    def generate_installer_package(self, request, pk=None):
+        """
+        Generate and download auto-installer package with virtual environment support
+        
+        Creates a ZIP containing:
+        - MCP server files (YAML + Python)
+        - install.bat (Windows auto-installer)
+        - install.sh (macOS/Linux auto-installer)
+        - update_claude_config.py (cross-platform config updater)
+        - requirements.txt
+        - README.md with instructions
+        """
+        from .installer_utils import create_installer_package
+        
+        server_instance = self.get_object()
+        
+        try:
+            # Get YAML file path
+            yaml_file = server_instance.yaml_file
+            yaml_file_path = yaml_file.file_path
+            
+            # Check if enhanced version exists
+            enhanced_path = yaml_file_path.replace('.yaml', '_enhanced.yaml').replace('.yml', '_enhanced.yml')
+            if os.path.exists(enhanced_path):
+                yaml_file_path = enhanced_path
+            
+            # Create temporary directory for package generation
+            temp_dir = tempfile.mkdtemp(prefix=f'installer_{server_instance.server_name}_')
+            
+            try:
+                # Generate installer package
+                zip_path = create_installer_package(
+                    yaml_file_path=yaml_file_path,
+                    server_name=server_instance.server_name,
+                    output_dir=temp_dir
+                )
+                
+                # Read ZIP file for response
+                with open(zip_path, 'rb') as f:
+                    zip_data = f.read()
+                
+                response = HttpResponse(
+                    zip_data,
+                    content_type='application/zip'
+                )
+                response['Content-Disposition'] = f'attachment; filename="{server_instance.server_name}_installer.zip"'
+                
+                return response
+                
+            finally:
+                # Cleanup temporary directory after a delay
+                import threading
+                def cleanup():
+                    import time
+                    time.sleep(5)  # Wait 5 seconds before cleanup
+                    shutil.rmtree(temp_dir, ignore_errors=True)
+                
+                threading.Thread(target=cleanup).start()
+        
+        except Exception as e:
+            return Response({
+                'status': 'error',
+                'message': f'Failed to generate installer package: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 
 class MCPRegistryViewSet(viewsets.ViewSet):

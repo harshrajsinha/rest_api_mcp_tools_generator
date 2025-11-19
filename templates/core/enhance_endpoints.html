@@ -3,715 +3,416 @@
 
 {% block title %}Enhance API Endpoints{% endblock %}
 
-{% block extra_css %}
-<style>
-    .enhancement-page {
-        background-color: #f8f9fa;
-        min-height: 100vh;
-        padding: 2rem 0;
-    }
-    
-    .page-header {
-        background: white;
-        border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        padding: 2rem;
-        margin-bottom: 2rem;
-    }
-    
-    .stats-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 1.5rem;
-        margin-bottom: 2rem;
-    }
-    
-    .stat-card {
-        background: white;
-        border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        padding: 1.5rem;
-        text-align: center;
-        border-left: 4px solid #007bff;
-    }
-    
-    .stat-number {
-        font-size: 1.5rem;
-        font-weight: bold;
-        color: #007bff;
-        margin-bottom: 0.5rem;
-    }
-    
-    .stat-label {
-        font-size: 0.9rem;
-        color: #6c757d;
-    }
-    
-    .endpoint-card {
-        background: white;
-        border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        margin-bottom: 1.5rem;
-        overflow: hidden;
-        border-left: 4px solid #dee2e6;
-    }
-    
-    .endpoint-card.enhanced {
-        border-left-color: #28a745;
-    }
-    
-    .endpoint-card.needs-enhancement {
-        border-left-color: #ffc107;
-    }
-    
-    .endpoint-header {
-        background: #f8f9fa;
-        padding: 1rem 1.5rem;
-        border-bottom: 1px solid #dee2e6;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
-    
-    .endpoint-info {
-        display: flex;
-        align-items: center;
-        gap: 1rem;
-    }
-    
-    .method-badge {
-        padding: 0.25rem 0.75rem;
-        border-radius: 4px;
-        font-weight: bold;
-        font-size: 0.8rem;
-        text-transform: uppercase;
-    }
-    
-    .method-get { background: #28a745; color: white; }
-    .method-post { background: #007bff; color: white; }
-    .method-put { background: #ffc107; color: #212529; }
-    .method-patch { background: #6f42c1; color: white; }
-    .method-delete { background: #dc3545; color: white; }
-    
-    .endpoint-path {
-        font-family: 'Courier New', monospace;
-        font-weight: bold;
-        color: #495057;
-    }
-    
-    .status-badge {
-        padding: 0.25rem 0.75rem;
-        border-radius: 12px;
-        font-size: 0.8rem;
-        font-weight: 500;
-    }
-    
-    .status-enhanced {
-        background: #d4edda;
-        color: #155724;
-    }
-    
-    .status-needs-enhancement {
-        background: #fff3cd;
-        color: #856404;
-    }
-    
-    .endpoint-body {
-        padding: 1.5rem;
-    }
-    
-    .endpoint-content {
-        display: grid;
-        grid-template-columns: 1fr auto;
-        gap: 2rem;
-        align-items: start;
-    }
-    
-    .description-section h6 {
-        color: #495057;
-        font-weight: 600;
-        margin-bottom: 0.75rem;
-    }
-    
-    .description-box {
-        background: #f8f9fa;
-        border: 1px solid #dee2e6;
-        border-radius: 4px;
-        padding: 1rem;
-        margin-bottom: 1rem;
-        color: #6c757d;
-    }
-    
-    .enhanced-box {
-        background: #d4edda;
-        border: 1px solid #c3e6cb;
-        border-radius: 4px;
-        padding: 1rem;
-        margin-bottom: 1rem;
-    }
-    
-    .enhanced-box .badge {
-        background: #28a745;
-        color: white;
-        font-size: 0.7rem;
-        padding: 0.25rem 0.5rem;
-        border-radius: 3px;
-        margin-bottom: 0.5rem;
-        display: inline-block;
-    }
-    
-    .parameters-section {
-        margin-top: 1.5rem;
-    }
-    
-    .parameter-grid {
-        display: grid;
-        gap: 1rem;
-        margin-top: 1rem;
-    }
-    
-    .parameter-item {
-        background: #ffffff;
-        border: 1px solid #dee2e6;
-        border-radius: 4px;
-        padding: 1rem;
-        display: flex;
-        justify-content: space-between;
-        align-items: start;
-    }
-    
-    .parameter-info h6 {
-        margin: 0 0 0.5rem 0;
-        color: #495057;
-        font-size: 0.9rem;
-    }
-    
-    .parameter-badges {
-        display: flex;
-        gap: 0.5rem;
-        margin-bottom: 0.5rem;
-    }
-    
-    .param-badge {
-        font-size: 0.7rem;
-        padding: 0.2rem 0.5rem;
-        border-radius: 3px;
-        font-weight: 500;
-    }
-    
-    .badge-type { background: #6f42c1; color: white; }
-    .badge-required { background: #dc3545; color: white; }
-    .badge-optional { background: #6c757d; color: white; }
-    
-    .parameter-desc {
-        color: #6c757d;
-        font-size: 0.85rem;
-    }
-    
-    .action-column {
-        display: flex;
-        flex-direction: column;
-        gap: 1rem;
-        min-width: 180px;
-    }
-    
-    .btn-enhance-endpoint {
-        background: #007bff;
-        color: white;
-        border: none;
-        padding: 0.75rem 1rem;
-        border-radius: 4px;
-        font-weight: 500;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        text-align: center;
-        text-decoration: none;
-    }
-    
-    .btn-enhance-endpoint:hover {
-        background: #0056b3;
-        transform: translateY(-1px);
-        color: white;
-    }
-    
-    .btn-enhance-param {
-        background: #f8f9fa;
-        color: #6c757d;
-        border: 1px solid #dee2e6;
-        padding: 0.25rem 0.5rem;
-        border-radius: 3px;
-        font-size: 0.8rem;
-        cursor: pointer;
-        transition: all 0.2s ease;
-    }
-    
-    .btn-enhance-param:hover {
-        background: #007bff;
-        color: white;
-        border-color: #007bff;
-    }
-    
-    .main-actions {
-        display: flex;
-        gap: 1rem;
-    }
-    
-    .btn-regenerate {
-        background: #28a745;
-        color: white;
-        border: none;
-        padding: 0.75rem 1.5rem;
-        border-radius: 4px;
-        font-weight: 500;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        text-decoration: none;
-    }
-    
-    .btn-regenerate:hover {
-        background: #218838;
-        color: white;
-    }
-    
-    .btn-back {
-        background: #6c757d;
-        color: white;
-        border: none;
-        padding: 0.75rem 1.5rem;
-        border-radius: 4px;
-        font-weight: 500;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        text-decoration: none;
-    }
-    
-    .btn-back:hover {
-        background: #5a6268;
-        color: white;
-        text-decoration: none;
-    }
-    
-    .empty-state {
-        background: white;
-        border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        padding: 3rem;
-        text-align: center;
-    }
-    
-    .empty-icon {
-        font-size: 3rem;
-        color: #ffc107;
-        margin-bottom: 1rem;
-    }
-    
-    .modal-content {
-        border-radius: 8px;
-    }
-    
-    .modal-header {
-        background: #007bff;
-        color: white;
-        border-radius: 8px 8px 0 0;
-    }
-    
-    .close {
-        color: white;
-        opacity: 0.8;
-    }
-    
-    .close:hover {
-        opacity: 1;
-        color: white;
-    }
-</style>
-{% endblock %}
-
 {% block content %}
-<div class="enhancement-page">
-    <div class="container">
-        <!-- Page Header -->
-        <div class="page-header">
-            <div class="d-flex justify-content-between align-items-center">
+<div class="container py-4">
+    <!-- Page Header -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body p-4">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
                 <div>
-                    <h1 class="h3 mb-2 text-dark">
-                        <i class="fas fa-edit text-primary"></i>
+                    <h1 class="h3 mb-2 fw-bold">
+                        <i class="fas fa-magic text-primary me-2"></i>
                         Enhance API Endpoints
                     </h1>
                     <p class="text-muted mb-0">Review and enhance endpoint descriptions for better tool generation</p>
                 </div>
-                <div class="main-actions">
-                    <button class="btn-regenerate" id="regenerateYaml" title="Generate YAML with all enhancements">
-                        <i class="fas fa-sync-alt"></i> Regenerate YAML with Enhancements
+                <div class="d-flex gap-2">
+                    <button class="btn btn-success" id="regenerateYaml" title="Generate YAML with all enhancements">
+                        <i class="fas fa-sync-alt me-2"></i> Regenerate YAML
                     </button>
-                    <a href="{% url 'core:home' %}" class="btn-back">
-                        <i class="fas fa-arrow-left"></i> Back to Home
+                    <a href="{% url 'core:home' %}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left me-2"></i> Back
                     </a>
                 </div>
             </div>
         </div>
+    </div>
 
-        <!-- Statistics -->
-        <div class="stats-grid">
+    <!-- Statistics -->
+    <div class="row g-4 mb-4">
+        <div class="col-md-6 col-lg-3">
             <div class="stat-card">
                 <div class="stat-number" id="endpointsEnhanced">0</div>
                 <div class="stat-label">Endpoints Enhanced</div>
             </div>
+        </div>
+        <div class="col-md-6 col-lg-3">
             <div class="stat-card">
                 <div class="stat-number" id="parametersEnhanced">0</div>
                 <div class="stat-label">Parameters Enhanced</div>
             </div>
+        </div>
+        <div class="col-md-6 col-lg-3">
             <div class="stat-card">
-                <div class="stat-number" id="yamlFileName">-</div>
+                <div class="stat-number text-truncate" id="yamlFileName"
+                    style="font-size: 1.25rem; line-height: 1.75rem; padding-top: 0.25rem;">-</div>
                 <div class="stat-label">YAML File</div>
             </div>
+        </div>
+        <div class="col-md-6 col-lg-3">
             <div class="stat-card">
                 <div class="stat-number" id="completionPercent">0%</div>
                 <div class="stat-label">Completion</div>
             </div>
         </div>
+    </div>
 
-        <!-- Endpoints Container -->
-        <div id="endpointsContainer">
-            <!-- Endpoints will be loaded here -->
-        </div>
-
-        <!-- Empty State -->
-        <div id="emptyState" class="empty-state" style="display: none;">
-            <div class="empty-icon">
-                <i class="fas fa-exclamation-triangle"></i>
+    <!-- Endpoints Container -->
+    <div id="endpointsContainer">
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
             </div>
-            <h4>No Endpoints Found</h4>
-            <p class="text-muted">No API endpoints are available for enhancement. Please generate API endpoints first.</p>
-            <a href="{% url 'core:home' %}" class="btn btn-primary">Go to Home</a>
+        </div>
+    </div>
+
+    <!-- Empty State -->
+    <div id="emptyState" class="d-none">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body text-center py-5">
+                <div class="display-1 text-muted mb-3">
+                    <i class="fas fa-search"></i>
+                </div>
+                <h4 class="mb-3">No Endpoints Found</h4>
+                <p class="text-muted mb-4">No API endpoints are available for enhancement. Please generate API endpoints
+                    first.</p>
+                <a href="{% url 'core:home' %}" class="btn btn-primary">Go to Home</a>
+            </div>
         </div>
     </div>
 </div>
 
 <!-- Enhancement Modal -->
-<div class="modal fade" id="enhancementModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Enhance Description</h5>
-                <button type="button" class="close" data-dismiss="modal">
-                    <span>&times;</span>
-                </button>
+<div class="modal fade" id="enhancementModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title fw-bold">Enhance Description</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <div class="modal-body">
+            <div class="modal-body p-4">
                 <form id="enhancementForm">
-                    <div class="form-group">
-                        <label for="originalDescription"><strong>Original Description:</strong></label>
-                        <div id="originalDescription" class="description-box"></div>
+                    <div class="mb-3">
+                        <label class="form-label fw-medium text-muted small text-uppercase">Original Description</label>
+                        <div id="originalDescription" class="description-box bg-light"></div>
                     </div>
-                    <div class="form-group">
-                        <label for="enhancedDescription"><strong>Enhanced Description:</strong></label>
-                        <textarea class="form-control" id="enhancedDescription" rows="5" 
-                                placeholder="Enter enhanced description..."></textarea>
+                    <div class="mb-3">
+                        <label for="enhancedDescription"
+                            class="form-label fw-medium text-muted small text-uppercase">Enhanced Description</label>
+                        <textarea class="form-control" id="enhancedDescription" rows="5"
+                            placeholder="Enter enhanced description..."></textarea>
                     </div>
-                    <div class="form-group">
-                        <label for="enhancedSummary"><strong>Enhanced Summary:</strong></label>
-                        <input type="text" class="form-control" id="enhancedSummary" 
+                    <div class="mb-3" id="summaryGroup">
+                        <label for="enhancedSummary"
+                            class="form-label fw-medium text-muted small text-uppercase">Enhanced Summary</label>
+                        <input type="text" class="form-control" id="enhancedSummary"
                             placeholder="Enter a brief summary...">
                     </div>
                 </form>
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" id="saveEnhancement">Save Enhancement</button>
+            <div class="modal-footer border-0 pt-0">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveEnhancement">
+                    <i class="fas fa-save me-2"></i> Save Enhancement
+                </button>
             </div>
         </div>
     </div>
 </div>
+
+<!-- Toast Container -->
+<div class="toast-container"></div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-$(document).ready(function() {
-    let currentEndpointId = null;
-    let currentParameterId = null;
-    let currentType = null; // 'endpoint' or 'parameter'
+    $(document).ready(function () {
+        let currentEndpointId = null;
+        let currentParameterId = null;
+        let currentType = null; // 'endpoint' or 'parameter'
 
-    // Load endpoints and statistics on page load
-    loadEnhancementData();
+        // Use the global apiManager if available, otherwise fallback
+        const showMessage = (msg, type) => {
+            if (window.apiManager && window.apiManager.showMessage) {
+                window.apiManager.showMessage(msg, type);
+            } else {
+                alert(msg);
+            }
+        };
 
-    // Load enhancement data
-    function loadEnhancementData() {
-        // Get yaml_file parameter from URL
-        const urlParams = new URLSearchParams(window.location.search);
-        const yamlFileId = urlParams.get('yaml_file') || '1'; // default to 1 if not provided
-        
-        Promise.all([
-            $.get('/api/tools-generator/endpoints/'),
-            $.get('/api/tools-generator/parameter-enhancements/'),
-            $.get(`/api/tools-generator/endpoints/enhancement_summary/?yaml_file=${yamlFileId}`)
-        ]).then(([endpointsResponse, parametersResponse, summaryResponse]) => {
-            const endpoints = endpointsResponse.results || endpointsResponse;
-            const parameters = parametersResponse.results || parametersResponse;
-            const summary = summaryResponse;
-            
-            displayStatistics(summary, endpoints);
-            displayEndpoints(endpoints, parameters);
-        }).catch(error => {
-            console.error('Error loading data:', error);
-            $('#emptyState').show();
-        });
-    }
+        // Load endpoints and statistics on page load
+        loadEnhancementData();
 
-    // Display statistics
-    function displayStatistics(summary, endpoints) {
-        $('#endpointsEnhanced').text(summary.endpoints_enhanced || 0);
-        $('#parametersEnhanced').text(summary.parameters_enhanced || 0);
-        
-        const yamlFile = endpoints.length > 0 ? endpoints[0].file_name || 'Not Set' : 'No File';
-        $('#yamlFileName').text(yamlFile.length > 15 ? yamlFile.substring(0, 15) + '...' : yamlFile);
-        
-        const totalEndpoints = endpoints.length;
-        const enhanced = summary.endpoints_enhanced || 0;
-        const percent = totalEndpoints > 0 ? Math.round((enhanced / totalEndpoints) * 100) : 0;
-        $('#completionPercent').text(percent + '%');
-    }
+        // Load enhancement data
+        function loadEnhancementData() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const yamlFileId = urlParams.get('yaml_file') || '1';
 
-    // Display endpoints
-    function displayEndpoints(endpoints, parameters) {
-        if (endpoints.length === 0) {
-            $('#emptyState').show();
-            return;
+            Promise.all([
+                $.get('/api/tools-generator/endpoints/'),
+                $.get('/api/tools-generator/parameter-enhancements/'),
+                $.get(`/api/tools-generator/endpoints/enhancement_summary/?yaml_file=${yamlFileId}`)
+            ]).then(([endpointsResponse, parametersResponse, summaryResponse]) => {
+                const endpoints = endpointsResponse.results || endpointsResponse;
+                const parameters = parametersResponse.results || parametersResponse;
+                const summary = summaryResponse;
+
+                displayStatistics(summary, endpoints);
+                displayEndpoints(endpoints, parameters);
+            }).catch(error => {
+                console.error('Error loading data:', error);
+                $('#endpointsContainer').addClass('d-none');
+                $('#emptyState').removeClass('d-none');
+            });
         }
 
-        const container = $('#endpointsContainer');
-        container.empty();
+        // Display statistics
+        function displayStatistics(summary, endpoints) {
+            $('#endpointsEnhanced').text(summary.endpoints_enhanced || 0);
+            $('#parametersEnhanced').text(summary.parameters_enhanced || 0);
 
-        endpoints.forEach(endpoint => {
-            const endpointParams = parameters.filter(p => p.endpoint === endpoint.id);
-            const html = createEndpointCard(endpoint, endpointParams);
-            container.append(html);
-        });
+            const yamlFile = endpoints.length > 0 ? endpoints[0].file_name || 'Not Set' : 'No File';
+            $('#yamlFileName').text(yamlFile);
+            $('#yamlFileName').attr('title', yamlFile);
 
-        // Bind event handlers
-        bindEventHandlers();
-    }
+            const totalEndpoints = endpoints.length;
+            const enhanced = summary.endpoints_enhanced || 0;
+            const percent = totalEndpoints > 0 ? Math.round((enhanced / totalEndpoints) * 100) : 0;
+            $('#completionPercent').text(percent + '%');
+        }
 
-    // Create endpoint card HTML
-    function createEndpointCard(endpoint, parameters) {
-        const isEnhanced = endpoint.enhanced_description;
-        const statusClass = isEnhanced ? 'enhanced' : 'needs-enhancement';
-        const statusText = isEnhanced ? 'Enhanced' : 'Needs Enhancement';
-        const statusBadgeClass = isEnhanced ? 'status-enhanced' : 'status-needs-enhancement';
+        // Display endpoints
+        function displayEndpoints(endpoints, parameters) {
+            const container = $('#endpointsContainer');
+            container.empty();
 
-        let parametersHtml = '';
-        if (parameters.length > 0) {
-            parametersHtml = `
-                <div class="parameters-section">
-                    <h6>Parameters (${parameters.length})</h6>
-                    <div class="parameter-grid">
+            if (endpoints.length === 0) {
+                container.addClass('d-none');
+                $('#emptyState').removeClass('d-none');
+                return;
+            }
+
+            endpoints.forEach(endpoint => {
+                const endpointParams = parameters.filter(p => p.endpoint === endpoint.id);
+                const html = createEndpointCard(endpoint, endpointParams);
+                container.append(html);
+            });
+
+            bindEventHandlers();
+        }
+
+        // Create endpoint card HTML
+        function createEndpointCard(endpoint, parameters) {
+            const isEnhanced = endpoint.enhanced_description;
+            const statusClass = isEnhanced ? 'enhanced' : 'needs-enhancement';
+            const statusText = isEnhanced ? 'Enhanced' : 'Needs Enhancement';
+            const statusBadgeClass = isEnhanced ? 'bg-success' : 'bg-warning text-dark';
+            const statusIcon = isEnhanced ? 'fa-check-circle' : 'fa-exclamation-circle';
+
+            let parametersHtml = '';
+            if (parameters.length > 0) {
+                parametersHtml = `
+                <div class="mt-4">
+                    <h6 class="fw-bold text-muted small text-uppercase mb-3">Parameters (${parameters.length})</h6>
+                    <div class="parameter-list">
                         ${parameters.map(param => createParameterItem(param)).join('')}
                     </div>
                 </div>
             `;
-        }
+            }
 
-        return `
+            return `
             <div class="endpoint-card ${statusClass}">
                 <div class="endpoint-header">
-                    <div class="endpoint-info">
+                    <div class="d-flex align-items-center gap-3">
                         <span class="method-badge method-${endpoint.method.toLowerCase()}">${endpoint.method}</span>
                         <span class="endpoint-path">${endpoint.path}</span>
                     </div>
-                    <span class="status-badge ${statusBadgeClass}">
-                        <i class="fas ${isEnhanced ? 'fa-check-circle' : 'fa-exclamation-circle'}"></i>
-                        ${statusText}
+                    <span class="badge ${statusBadgeClass}">
+                        <i class="fas ${statusIcon} me-1"></i> ${statusText}
                     </span>
                 </div>
                 <div class="endpoint-body">
-                    <div class="endpoint-content">
-                        <div class="description-section">
-                            <h6>Description</h6>
-                            <div class="description-box">
-                                ${endpoint.description || 'No description available'}
-                            </div>
-                            ${endpoint.enhanced_description ? `
-                                <div class="enhanced-box">
-                                    <span class="badge">Enhanced</span>
-                                    <div><strong>Description:</strong> ${endpoint.enhanced_description}</div>
-                                    ${endpoint.enhanced_summary ? `<div><strong>Summary:</strong> ${endpoint.enhanced_summary}</div>` : ''}
+                    <div class="row">
+                        <div class="col-lg-9">
+                            <div class="mb-3">
+                                <h6 class="fw-bold text-muted small text-uppercase mb-2">Description</h6>
+                                <div class="description-box">
+                                    ${endpoint.description || 'No description available'}
                                 </div>
-                            ` : ''}
+                                ${endpoint.enhanced_description ? `
+                                    <div class="enhanced-box">
+                                        <div class="d-flex align-items-center mb-2">
+                                            <i class="fas fa-magic text-success me-2"></i>
+                                            <span class="fw-bold text-success small text-uppercase">Enhanced Version</span>
+                                        </div>
+                                        <div class="mb-2">${endpoint.enhanced_description}</div>
+                                        ${endpoint.enhanced_summary ? `<div class="small text-muted border-top pt-2 mt-2"><strong>Summary:</strong> ${endpoint.enhanced_summary}</div>` : ''}
+                                    </div>
+                                ` : ''}
+                            </div>
                             ${parametersHtml}
                         </div>
-                        <div class="action-column">
-                            <button class="btn-enhance-endpoint" data-endpoint-id="${endpoint.id}">
-                                <i class="fas fa-edit"></i>
-                                ${isEnhanced ? 'Edit Enhancement' : 'Enhance Description'}
-                            </button>
+                        <div class="col-lg-3 border-start">
+                            <div class="d-grid gap-2">
+                                <button class="btn btn-primary btn-sm btn-enhance-endpoint" data-endpoint-id="${endpoint.id}">
+                                    <i class="fas fa-edit me-2"></i> ${isEnhanced ? 'Edit Enhancement' : 'Enhance Description'}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
         `;
-    }
+        }
 
-    // Create parameter item HTML
-    function createParameterItem(param) {
-        const isEnhanced = param.enhanced_description;
-        
-        return `
+        // Create parameter item HTML
+        function createParameterItem(param) {
+            const isEnhanced = param.enhanced_description;
+
+            return `
             <div class="parameter-item">
-                <div class="parameter-info">
-                    <h6>${param.name}</h6>
-                    <div class="parameter-badges">
+                <div class="flex-grow-1">
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <span class="fw-bold text-dark">${param.name}</span>
                         <span class="param-badge badge-type">${param.type || 'Unknown'}</span>
                         <span class="param-badge ${param.required ? 'badge-required' : 'badge-optional'}">
                             ${param.required ? 'Required' : 'Optional'}
                         </span>
                     </div>
-                    <div class="parameter-desc">
+                    <div class="text-muted small">
                         ${param.description || 'No description available'}
-                        ${isEnhanced ? `<div class="mt-2"><strong>Enhanced:</strong> ${param.enhanced_description}</div>` : ''}
                     </div>
+                    ${isEnhanced ? `
+                        <div class="mt-2 p-2 bg-light rounded border small">
+                            <i class="fas fa-magic text-success me-1"></i> 
+                            <strong>Enhanced:</strong> ${param.enhanced_description}
+                        </div>
+                    ` : ''}
                 </div>
-                <button class="btn-enhance-param" data-parameter-id="${param.id}">
+                <button class="btn btn-outline-secondary btn-sm ms-3 btn-enhance-param" data-parameter-id="${param.id}">
                     <i class="fas fa-edit"></i>
-                    ${isEnhanced ? 'Edit' : 'Enhance'}
                 </button>
             </div>
         `;
-    }
-
-    // Bind event handlers
-    function bindEventHandlers() {
-        $('.btn-enhance-endpoint').off('click').on('click', function() {
-            currentEndpointId = $(this).data('endpoint-id');
-            currentParameterId = null;
-            currentType = 'endpoint';
-            openEnhancementModal();
-        });
-
-        $('.btn-enhance-param').off('click').on('click', function() {
-            currentParameterId = $(this).data('parameter-id');
-            currentEndpointId = null;
-            currentType = 'parameter';
-            openEnhancementModal();
-        });
-    }
-
-    // Open enhancement modal
-    function openEnhancementModal() {
-        if (currentType === 'endpoint' && currentEndpointId) {
-            // Load endpoint data
-            $.get(`/api/tools-generator/endpoints/${currentEndpointId}/`)
-                .then(endpoint => {
-                    $('#originalDescription').text(endpoint.description || 'No description available');
-                    $('#enhancedDescription').val(endpoint.enhanced_description || '');
-                    $('#enhancedSummary').val(endpoint.enhanced_summary || '');
-                    $('#enhancementModal').modal('show');
-                });
-        } else if (currentType === 'parameter' && currentParameterId) {
-            // Load parameter data
-            $.get(`/api/tools-generator/parameter-enhancements/${currentParameterId}/`)
-                .then(param => {
-                    $('#originalDescription').text(param.description || 'No description available');
-                    $('#enhancedDescription').val(param.enhanced_description || '');
-                    $('#enhancedSummary').val(''); // Parameters don't have summary
-                    $('#enhancementModal').modal('show');
-                });
-        }
-    }
-
-    // Save enhancement
-    $('#saveEnhancement').on('click', function() {
-        const enhancedDescription = $('#enhancedDescription').val().trim();
-        const enhancedSummary = $('#enhancedSummary').val().trim();
-
-        if (!enhancedDescription) {
-            alert('Please enter an enhanced description');
-            return;
         }
 
-        if (currentType === 'endpoint' && currentEndpointId) {
-            saveEndpointEnhancement(currentEndpointId, enhancedDescription, enhancedSummary);
-        } else if (currentType === 'parameter' && currentParameterId) {
-            saveParameterEnhancement(currentParameterId, enhancedDescription);
-        }
-    });
+        // Bind event handlers
+        function bindEventHandlers() {
+            $('.btn-enhance-endpoint').off('click').on('click', function () {
+                currentEndpointId = $(this).data('endpoint-id');
+                currentParameterId = null;
+                currentType = 'endpoint';
+                openEnhancementModal();
+            });
 
-    // Save endpoint enhancement
-    function saveEndpointEnhancement(endpointId, description, summary) {
-        $.ajax({
-            url: `/api/tools-generator/endpoints/${endpointId}/enhance_description/`,
-            method: 'POST',
-            data: {
-                enhanced_description: description,
-                enhanced_summary: summary
-            },
-            success: function(response) {
-                $('#enhancementModal').modal('hide');
-                loadEnhancementData(); // Reload data
-                showAlert('Endpoint enhancement saved successfully!', 'success');
-            },
-            error: function(xhr) {
-                showAlert('Error saving endpoint enhancement: ' + (xhr.responseJSON?.error || 'Unknown error'), 'danger');
-            }
-        });
-    }
-
-    // Save parameter enhancement
-    function saveParameterEnhancement(parameterId, description) {
-        $.ajax({
-            url: `/api/tools-generator/parameter-enhancements/${parameterId}/enhance_parameter/`,
-            method: 'POST',
-            data: {
-                enhanced_description: description
-            },
-            success: function(response) {
-                $('#enhancementModal').modal('hide');
-                loadEnhancementData(); // Reload data
-                showAlert('Parameter enhancement saved successfully!', 'success');
-            },
-            error: function(xhr) {
-                showAlert('Error saving parameter enhancement: ' + (xhr.responseJSON?.error || 'Unknown error'), 'danger');
-            }
-        });
-    }
-
-    // Regenerate YAML with enhancements
-    $('#regenerateYaml').on('click', function() {
-        if (confirm('This will regenerate the YAML file with all enhancements. Continue?')) {
-            $.ajax({
-                url: '/api/tools-generator/endpoints/regenerate_with_enhancements/',
-                method: 'POST',
-                success: function(response) {
-                    showAlert('YAML file regenerated successfully with enhancements!', 'success');
-                },
-                error: function(xhr) {
-                    showAlert('Error regenerating YAML: ' + (xhr.responseJSON?.error || 'Unknown error'), 'danger');
-                }
+            $('.btn-enhance-param').off('click').on('click', function () {
+                currentParameterId = $(this).data('parameter-id');
+                currentEndpointId = null;
+                currentType = 'parameter';
+                openEnhancementModal();
             });
         }
-    });
 
-    // Show alert
-    function showAlert(message, type) {
-        const alertHtml = `
-            <div class="alert alert-${type} alert-dismissible fade show" role="alert">
-                ${message}
-                <button type="button" class="close" data-dismiss="alert">
-                    <span aria-hidden="true">&times;</span>
-                </button>
-            </div>
-        `;
-        
-        // Remove existing alerts
-        $('.alert').remove();
-        
-        // Add new alert
-        $('.container').prepend(alertHtml);
-        
-        // Auto remove after 5 seconds
-        setTimeout(function() {
-            $('.alert').fadeOut();
-        }, 5000);
-    }
-});
+        // Open enhancement modal
+        function openEnhancementModal() {
+            const modal = new bootstrap.Modal(document.getElementById('enhancementModal'));
+
+            if (currentType === 'endpoint' && currentEndpointId) {
+                $('#summaryGroup').show();
+                $.get(`/api/tools-generator/endpoints/${currentEndpointId}/`)
+                    .then(endpoint => {
+                        $('#originalDescription').text(endpoint.description || 'No description available');
+                        $('#enhancedDescription').val(endpoint.enhanced_description || '');
+                        $('#enhancedSummary').val(endpoint.enhanced_summary || '');
+                        modal.show();
+                    });
+            } else if (currentType === 'parameter' && currentParameterId) {
+                $('#summaryGroup').hide();
+                $.get(`/api/tools-generator/parameter-enhancements/${currentParameterId}/`)
+                    .then(param => {
+                        $('#originalDescription').text(param.description || 'No description available');
+                        $('#enhancedDescription').val(param.enhanced_description || '');
+                        $('#enhancedSummary').val('');
+                        modal.show();
+                    });
+            }
+        }
+
+        // Save enhancement
+        $('#saveEnhancement').on('click', function () {
+            const btn = $(this);
+            const originalText = btn.html();
+            const enhancedDescription = $('#enhancedDescription').val().trim();
+            const enhancedSummary = $('#enhancedSummary').val().trim();
+
+            if (!enhancedDescription) {
+                showMessage('Please enter an enhanced description', 'warning');
+                return;
+            }
+
+            btn.html('<span class="spinner-border spinner-border-sm me-2"></span>Saving...').prop('disabled', true);
+
+            const successCallback = (msg) => {
+                $('#enhancementModal').modal('hide'); // Use jQuery for consistency with older Bootstrap if needed, but we have 5.3
+                // Actually, since I used new bootstrap.Modal to show, I should use the instance to hide, 
+                // but I didn't store the instance globally. 
+                // Fallback to jQuery for hiding which usually works if initialized via data attributes or jQuery
+                bootstrap.Modal.getInstance(document.getElementById('enhancementModal')).hide();
+
+                loadEnhancementData();
+                showMessage(msg, 'success');
+                btn.html(originalText).prop('disabled', false);
+            };
+
+            const errorCallback = (xhr) => {
+                showMessage('Error saving: ' + (xhr.responseJSON?.error || 'Unknown error'), 'error');
+                btn.html(originalText).prop('disabled', false);
+            };
+
+            if (currentType === 'endpoint' && currentEndpointId) {
+                $.ajax({
+                    url: `/api/tools-generator/endpoints/${currentEndpointId}/enhance_description/`,
+                    method: 'POST',
+                    data: {
+                        enhanced_description: enhancedDescription,
+                        enhanced_summary: enhancedSummary
+                    },
+                    success: () => successCallback('Endpoint enhancement saved!'),
+                    error: errorCallback
+                });
+            } else if (currentType === 'parameter' && currentParameterId) {
+                $.ajax({
+                    url: `/api/tools-generator/parameter-enhancements/${currentParameterId}/enhance_parameter/`,
+                    method: 'POST',
+                    data: { enhanced_description: enhancedDescription },
+                    success: () => successCallback('Parameter enhancement saved!'),
+                    error: errorCallback
+                });
+            }
+        });
+
+        // Regenerate YAML with enhancements
+        $('#regenerateYaml').on('click', function () {
+            if (confirm('This will regenerate the YAML file with all enhancements. Continue?')) {
+                const btn = $(this);
+                const originalText = btn.html();
+                btn.html('<span class="spinner-border spinner-border-sm me-2"></span>Regenerating...').prop('disabled', true);
+
+                $.ajax({
+                    url: '/api/tools-generator/endpoints/regenerate_with_enhancements/',
+                    method: 'POST',
+                    success: function (response) {
+                        showMessage('YAML file regenerated successfully with enhancements!', 'success');
+                        btn.html(originalText).prop('disabled', false);
+                    },
+                    error: function (xhr) {
+                        showMessage('Error regenerating YAML: ' + (xhr.responseJSON?.error || 'Unknown error'), 'error');
+                        btn.html(originalText).prop('disabled', false);
+                    }
+                });
+            }
+        });
+    });
 </script>
 {% endblock %}

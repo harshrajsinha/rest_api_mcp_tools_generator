@@ -366,6 +366,7 @@ class RestApiMCPServer:
         annotations = {{'return': str}}
         
         properties = parameters.get('properties', {{}})
+        required = parameters.get('required', [])
         
         for param_name, param_info in properties.items():
             if param_name not in ['client_key', 'entity_key', 'user_key']:
